@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   Column,
   Text,
@@ -11,6 +11,7 @@ import {
   Icon,
 } from "fuickjs";
 import { ControlService } from "../services/control_service";
+import { ScreenCaptureService } from "../services/screen_capture_service";
 
 interface ControleeWaitingPageProps {
   deviceName?: string;
@@ -19,6 +20,24 @@ interface ControleeWaitingPageProps {
 export default function ControleeWaitingPage(props: ControleeWaitingPageProps) {
   const { deviceName } = props;
   const navigator = useNavigator();
+
+  useEffect(() => {
+    // 监听连接状态
+    const unsubscribeState = ControlService.onConnectionStateChange(
+      (state, data) => {
+        if (state === "disconnected") {
+          navigator.pop();
+        }
+      }
+    );
+
+    return () => {
+      unsubscribeState();
+      // 页面卸载时不停止服务，以便其他客户端连接
+      // ScreenCaptureService.stopCapture();
+      // ControlService.stopServer();
+    };
+  }, []);
 
   return (
     <Scaffold

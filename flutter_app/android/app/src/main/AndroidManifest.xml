@@ -43,6 +43,7 @@
         </activity>
 
         <!-- Accessibility 服务 -->
+        <!-- 辅助功能服务 -->
         <!--
         <service
             android:name=".RemoteControlAccessibilityService"

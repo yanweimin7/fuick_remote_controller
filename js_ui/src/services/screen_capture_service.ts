@@ -26,7 +26,9 @@ export class ScreenCaptureService {
 
   static onScreenFrame(callback: (frame: ScreenFrame) => void): () => void {
     const handleFrame = (data: any) => {
-      // console.log(`[JS] ScreenCaptureService received frame raw data:`, data);
+      // console.log(`[JS] ScreenCaptureService received frame, size: ${data?.data?.length}`);
+      if (!data) return;
+
       const frame: ScreenFrame = {
         data: data.data,
         timestamp: data.timestamp,

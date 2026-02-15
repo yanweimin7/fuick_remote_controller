@@ -48,6 +48,10 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
 
     // 监听屏幕帧数据
     const unsubscribe = ScreenCaptureService.onScreenFrame((frame: ScreenFrame) => {
+      if (frame.data) {
+        setScreenImage(frame.data);
+      }
+
       // 计算 FPS
       frameCount.current++;
       const now = Date.now();
@@ -281,9 +285,8 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
               {screenImage ? (
                 <Image
                   url={`data:image/jpeg;base64,${screenImage}`}
+                  gaplessPlayback={true} 
                   fit="contain"
-                  // @ts-ignore: gaplessPlayback is added dynamically
-                  gaplessPlayback={true} // 避免图片切换时闪烁
                 />
               ) : (
                 <Column mainAxisAlignment="center">

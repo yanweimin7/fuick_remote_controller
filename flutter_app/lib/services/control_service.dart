@@ -211,9 +211,12 @@ class ControlService extends BaseFuickService {
 
       switch (action) {
         case 'click':
+          print(
+              'ControlService: Injecting click at ${params['x']}, ${params['y']}');
           await _injectClick(params['x'], params['y']);
           break;
         case 'swipe':
+          print('ControlService: Injecting swipe');
           await _injectSwipe(
             params['startX'],
             params['startY'],
@@ -264,14 +267,8 @@ class ControlService extends BaseFuickService {
       };
       final jsonStr = jsonEncode(data);
 
-      // 分块发送
-      const chunkSize = 4096;
       final bytes = utf8.encode('$jsonStr\n');
-      for (var i = 0; i < bytes.length; i += chunkSize) {
-        final end =
-            (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
-        _serverClientSocket!.add(bytes.sublist(i, end));
-      }
+      _serverClientSocket!.add(bytes);
 
       _frameCount++;
       _totalBytes += jsonStr.length;
@@ -307,22 +304,33 @@ class ControlService extends BaseFuickService {
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen(
-            (message) {
-              if (message.trim().isNotEmpty) {
-                _onResponseData(message);
-              }
-            },
-            onError: (e) => print('Connection error: $e'),
-            onDone: () {
-              print('Disconnected from controlee');
-              _clientSocket = null;
-              try {
-                ctx.invoke('NativeEvent', 'receive', ['disconnected', {}]);
-              } catch (e) {
-                debugPrint('Error emitting disconnected: $e');
-              }
-            },
-          );
+        (message) {
+          if (message.trim().isNotEmpty) {
+            _onResponseData(message);
+          }
+        },
+        onError: (e) {
+          print('Connection error: $e');
+          _clientSocket = null;
+          try {
+            ctx.invoke('NativeEvent', 'receive', [
+              'disconnected',
+              {'error': e.toString()}
+            ]);
+          } catch (e) {
+            debugPrint('Error emitting disconnected on error: $e');
+          }
+        },
+        onDone: () {
+          print('Disconnected from controlee');
+          _clientSocket = null;
+          try {
+            ctx.invoke('NativeEvent', 'receive', ['disconnected', {}]);
+          } catch (e) {
+            debugPrint('Error emitting disconnected: $e');
+          }
+        },
+      );
 
       try {
         ctx.invoke('NativeEvent', 'receive', [
@@ -344,6 +352,11 @@ class ControlService extends BaseFuickService {
     try {
       await _clientSocket?.close();
       _clientSocket = null;
+
+      // 如果作为被控端，也要断开当前的客户端连接
+      await _serverClientSocket?.close();
+      _serverClientSocket = null;
+
       return true;
     } catch (e) {
       return false;
@@ -352,6 +365,7 @@ class ControlService extends BaseFuickService {
 
   /// 发送点击事件
   Future<bool> sendClick(double x, double y) async {
+    print('wine send commne ');
     return _sendCommand({
       'action': 'click',
       'params': {'x': x, 'y': y}

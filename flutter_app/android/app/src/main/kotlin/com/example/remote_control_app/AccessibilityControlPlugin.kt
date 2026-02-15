@@ -31,6 +31,7 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        // Log.d(TAG, "onMethodCall: ${call.method}") // 调试日志
         when (call.method) {
             "isAccessibilityEnabled" -> result.success(isAccessibilityEnabled())
             "openAccessibilitySettings" -> openAccessibilitySettings(result)
@@ -47,12 +48,13 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
      * 检查 Accessibility 服务是否启用
      */
     private fun isAccessibilityEnabled(): Boolean {
-        val accessibilityManager = context.getSystemService(Context.ACCESSIBILITY_SERVICE)
-                as AccessibilityManager
-        return accessibilityManager.isEnabled && 
-               RemoteControlAccessibilityService.instance != null
+        // 简化检查逻辑，直接看 Service 实例是否存在
+        val service = RemoteControlAccessibilityService.instance
+        val isEnabled = service != null
+        Log.d(TAG, "isAccessibilityEnabled: $isEnabled (Service instance: $service)")
+        return isEnabled
     }
-
+    
     /**
      * 打开 Accessibility 设置页面
      */
@@ -69,14 +71,18 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
     private fun injectClick(call: MethodCall, result: MethodChannel.Result) {
         val x = call.argument<Double>("x")?.toFloat() ?: 0f
         val y = call.argument<Double>("y")?.toFloat() ?: 0f
+        
+        Log.d(TAG, "injectClick: ($x, $y)")
 
         val service = RemoteControlAccessibilityService.instance
         if (service == null) {
+            Log.e(TAG, "injectClick failed: Service not running")
             result.error("SERVICE_NOT_RUNNING", "Accessibility service is not running", null)
             return
         }
 
         val success = service.performClick(x, y)
+        Log.d(TAG, "injectClick result: $success")
         result.success(success)
     }
 
