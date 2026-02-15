@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
-import 'package:flutter/foundation.dart';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:fuickjs_flutter/core/service/base_fuick_service.dart';
-import 'package:fuickjs_flutter/core/service/native_event_service.dart';
 import 'package:fuickjs_flutter/core/service/native_services.dart';
 import 'package:fuickjs_flutter/core/utils/extensions.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+
 import 'control_service.dart';
 
 /// 屏幕捕获服务 - 用于被控端捕获屏幕并传输给控制端
@@ -21,7 +20,6 @@ class ScreenCaptureService extends BaseFuickService {
 
   static const MethodChannel _channel = MethodChannel('screen_capture');
 
-  WebSocketChannel? _webSocket;
   StreamSubscription? _frameSubscription;
   bool _isCapturing = false;
 
@@ -34,12 +32,11 @@ class ScreenCaptureService extends BaseFuickService {
   ScreenCaptureService._internal() {
     // 开始屏幕捕获
     registerMethod('startCapture', (args) async {
-      final port = asIntOrNull(args['port']) ?? 8080;
       _quality = asIntOrNull(args['quality']) ?? 80;
       _maxWidth = asIntOrNull(args['maxWidth']) ?? 1280;
       _maxHeight = asIntOrNull(args['maxHeight']) ?? 720;
       _frameRate = asIntOrNull(args['frameRate']) ?? 30;
-      return await startCapture(port);
+      return await startCapture();
     });
 
     // 停止屏幕捕获
@@ -94,8 +91,8 @@ class ScreenCaptureService extends BaseFuickService {
   }
 
   /// 开始屏幕捕获
-  Future<bool> startCapture(int port) async {
-    // print('ScreenCapture: startCapture called with port $port');
+  Future<bool> startCapture() async {
+    // print('ScreenCapture: startCapture called');
     try {
       if (_isCapturing) {
         // print('ScreenCapture: Already capturing');
@@ -138,7 +135,6 @@ class ScreenCaptureService extends BaseFuickService {
     try {
       await _frameSubscription?.cancel();
       await _channel.invokeMethod('stopCapture');
-      await _webSocket?.sink.close();
       _isCapturing = false;
       return true;
     } catch (e) {

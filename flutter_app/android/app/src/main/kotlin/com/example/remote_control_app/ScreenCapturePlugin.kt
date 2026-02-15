@@ -110,6 +110,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
     private var handler: Handler? = null
     private var executor: ExecutorService? = null
     private var eventSink: EventChannel.EventSink? = null
+    private var mediaProjectionCallback: MediaProjection.Callback? = null
 
     private var captureWidth = 1280
     private var captureHeight = 720
@@ -143,14 +144,9 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
 
         pendingResult = result
 
-        // 在请求权限之前启动前台服务 (Android 14+ 严格要求服务必须先运行)
-        val serviceIntent = Intent(activity, ScreenCaptureService::class.java)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            activity.startForegroundService(serviceIntent)
-        } else {
-            activity.startService(serviceIntent)
-        }
-
+        // Android 14+ 要求: 不能在获得投影权限之前启动 mediaProjection 类型的 Service
+        // 所以这里我们只请求权限，Service 的启动移到 onActivityResult 中
+        
         mediaProjectionManager = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
             as MediaProjectionManager
 
@@ -210,16 +206,21 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
         screenWidth = displayMetrics.widthPixels
         screenHeight = displayMetrics.heightPixels
 
+        if (screenWidth <= 0 || screenHeight <= 0) {
+            screenWidth = 720
+            screenHeight = 1280
+        }
+
         // 初始化 Handler 和 Executor
         handler = Handler(Looper.getMainLooper())
         executor = Executors.newSingleThreadExecutor()
 
         // 恢复原始分辨率和质量
-        val scale = 0.5f 
+        val scale = 0.25f 
         // 确保宽高为偶数，避免某些设备编码器不支持奇数
         captureWidth = ((screenWidth * scale).toInt() / 2) * 2
         captureHeight = ((screenHeight * scale).toInt() / 2) * 2
-        captureQuality = 30 // 降低默认质量
+        captureQuality = 15 // 降低默认质量
  
 
         // android.util.Log.d("ScreenCapture", "Capture settings: ${captureWidth}x${captureHeight}, quality=$captureQuality")
@@ -253,6 +254,15 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
                 captureFrame()
             }
         }, handler)
+
+        // Android 14 Requirement: Register a callback before creating virtual display
+        mediaProjectionCallback = object : MediaProjection.Callback() {
+            override fun onStop() {
+                super.onStop()
+                stopCapture(null)
+            }
+        }
+        projection.registerCallback(mediaProjectionCallback!!, handler)
 
         // 创建 VirtualDisplay
         try {
@@ -376,8 +386,24 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
     /**
      * 停止屏幕捕获
      */
-    private fun stopCapture(result: MethodChannel.Result) {
+    private fun stopCapture(result: MethodChannel.Result?) {
         isCapturing = false
+
+        try {
+            mediaProjectionCallback?.let { callback ->
+                mediaProjection?.unregisterCallback(callback)
+                mediaProjectionCallback = null
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+
+        try {
+            mediaProjection?.stop()
+        } catch (e: Exception) {
+            // ignore
+        }
+        mediaProjection = null
 
         virtualDisplay?.release()
         virtualDisplay = null
@@ -394,7 +420,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
             it.stopService(serviceIntent)
         }
 
-        result.success(true)
+        result?.success(true)
     }
 
     /**
@@ -414,15 +440,31 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
         if (requestCode != REQUEST_CODE) return false
 
         if (resultCode == Activity.RESULT_OK && data != null) {
-            // android.util.Log.d("ScreenCapture", "Permission granted, getting MediaProjection")
-            try {
-                mediaProjection = mediaProjectionManager?.getMediaProjection(resultCode, data)
-                // android.util.Log.d("ScreenCapture", "MediaProjection obtained: $mediaProjection")
-                pendingResult?.success(true)
-            } catch (e: Exception) {
-                android.util.Log.e("ScreenCapture", "Error getting MediaProjection", e)
-                pendingResult?.error("PROJECTION_ERROR", e.message, null)
+            // Android 14+: 必须在获取 MediaProjection 之前启动 Foreground Service (且类型为 mediaProjection)
+            activity?.let {
+                val serviceIntent = Intent(it, ScreenCaptureService::class.java)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    it.startForegroundService(serviceIntent)
+                } else {
+                    it.startService(serviceIntent)
+                }
             }
+
+            // 延迟获取 MediaProjection，确保 Service.startForeground 已执行
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    mediaProjection = mediaProjectionManager?.getMediaProjection(resultCode, data)
+                    pendingResult?.success(true)
+                } catch (e: Exception) {
+                    android.util.Log.e("ScreenCapture", "Error getting MediaProjection", e)
+                    pendingResult?.error("PROJECTION_ERROR", e.message, null)
+                } finally {
+                    pendingResult = null
+                }
+            }, 500)
+            
+            // 返回 true，表示已处理，但在 postDelayed 中才真正完成
+            return true
         } else {
             android.util.Log.w("ScreenCapture", "Permission denied or data is null")
             // 用户拒绝了权限，停止之前启动的前台服务

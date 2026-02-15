@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:fuickjs_flutter/core/container/fuick_app_view.dart';
 import 'package:fuickjs_flutter/core/engine/engine.dart';
 
-import 'screens/mode_select_screen.dart';
 import 'services/control_service.dart';
 import 'services/network_discovery_service.dart';
 import 'services/screen_capture_service.dart';
@@ -40,17 +40,12 @@ class RemoteControlApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const ModeSelectScreen(),
+      // 直接加载 FuickJS 页面作为首页
+      home: const FuickAppView(
+        appName: 'remote_controller',
+        initialRoute: '/', // 对应 js_ui/src/app.ts 中的注册路由
+        initialParams: {},
+      ),
     );
-  }
-}
-
-/// 加载 JS Bundle 文件
-Future<String> loadJSBundle() async {
-  try {
-    return await rootBundle.loadString('assets/js/bundle.js');
-  } catch (e) {
-    print('Failed to load JS bundle: $e');
-    return '';
   }
 }

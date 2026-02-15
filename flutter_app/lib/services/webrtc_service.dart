@@ -27,6 +27,9 @@ class WebRTCService extends BaseFuickService {
   bool _isCaller = false;
   bool _isController = false;
 
+  // Cache for incoming chunks
+  final Map<String, List<String?>> _chunkCache = {};
+
   // Configuration
   final Map<String, dynamic> _config = {
     'iceServers': [
@@ -42,9 +45,6 @@ class WebRTCService extends BaseFuickService {
     },
     'optional': [],
   };
-
-  HttpServer? _signalingServer;
-  String? _localOffer;
 
   WebRTCService._internal() {
     registerAsyncMethod('startCall', (args) async {
@@ -82,16 +82,6 @@ class WebRTCService extends BaseFuickService {
       final answerToken = args['answerToken'];
       await completeConnection(answerToken);
       return true;
-    });
-
-    registerAsyncMethod('startSignalingServer', (args) async {
-      final port = args['port'] ?? 8080;
-      return await startSignalingServer(port);
-    });
-
-    registerAsyncMethod('connectViaUrl', (args) async {
-      final url = args['url'];
-      return await connectViaUrl(url);
     });
   }
 
@@ -148,7 +138,6 @@ class WebRTCService extends BaseFuickService {
     await _peerConnection!.setLocalDescription(offer);
 
     final token = await _waitForGathering();
-    _localOffer = token; // Store for HTTP server
     return _compressToken(token);
   }
 
@@ -206,137 +195,6 @@ class WebRTCService extends BaseFuickService {
   void _completeGathering() {
     if (_gatheringCompleter != null && !_gatheringCompleter!.isCompleted) {
       _gatheringCompleter!.complete('done');
-    }
-  }
-
-  // HTTP Signaling Server (For Tune/Direct Connection)
-  Future<Map<String, dynamic>> startSignalingServer(int port) async {
-    try {
-      await _signalingServer?.close(force: true);
-      _signalingServer = await HttpServer.bind(InternetAddress.anyIPv4, port);
-
-      // Generate offer immediately if not exists
-      // Controlee is running the server, so isController = false
-      if (_localOffer == null) {
-        await createOfferToken(isController: false);
-      }
-
-      _signalingServer!.listen((HttpRequest request) async {
-        // Enable CORS
-        request.response.headers.add('Access-Control-Allow-Origin', '*');
-        request.response.headers
-            .add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        request.response.headers
-            .add('Access-Control-Allow-Headers', 'Content-Type');
-
-        if (request.method == 'OPTIONS') {
-          request.response.close();
-          return;
-        }
-
-        if (request.uri.path == '/offer' && request.method == 'GET') {
-          // Return the uncompressed JSON offer
-          request.response.headers.contentType = ContentType.json;
-          request.response.write(_localOffer);
-          request.response.close();
-        } else if (request.uri.path == '/answer' && request.method == 'POST') {
-          try {
-            final content = await utf8.decodeStream(request);
-            final answerMap = jsonDecode(content);
-            // We got the answer, complete connection
-            await _peerConnection!.setRemoteDescription(
-                RTCSessionDescription(answerMap['sdp'], 'answer'));
-
-            request.response.write(jsonEncode({'success': true}));
-          } catch (e) {
-            request.response.statusCode = HttpStatus.badRequest;
-            request.response.write(jsonEncode({'error': e.toString()}));
-          } finally {
-            request.response.close();
-          }
-        } else {
-          request.response.statusCode = HttpStatus.notFound;
-          request.response.close();
-        }
-      });
-
-      return {'success': true, 'port': port};
-    } catch (e) {
-      return {'success': false, 'error': e.toString()};
-    }
-  }
-
-  // Client Side: Connect via URL
-  Future<Map<String, dynamic>> connectViaUrl(String url) async {
-    try {
-      // 1. Get Offer
-      final client = HttpClient();
-      // Allow self-signed certs if using HTTPS (common with some tunnel tools)
-      client.badCertificateCallback = (cert, host, port) => true;
-
-      // Ensure URL has protocol
-      if (!url.startsWith('http')) {
-        url = 'http://$url';
-      }
-      // Remove trailing slash
-      if (url.endsWith('/')) {
-        url = url.substring(0, url.length - 1);
-      }
-
-      final offerReq = await client.getUrl(Uri.parse('$url/offer'));
-      final offerRes = await offerReq.close();
-      if (offerRes.statusCode != 200) {
-        return {
-          'success': false,
-          'error': 'Failed to get offer: ${offerRes.statusCode}'
-        };
-      }
-      final offerJson = await utf8.decodeStream(offerRes);
-
-      // 2. Create Answer
-      _isCaller = false;
-      _isController = true; // Controller connecting via URL
-      _peerConnection = await createPeerConnection(_config, _constraints);
-      _gatheringCompleter = Completer<String>();
-
-      _peerConnection!.onIceGatheringState = (state) {
-        if (state == RTCIceGatheringState.RTCIceGatheringStateComplete) {
-          _completeGathering();
-        }
-      };
-
-      _peerConnection!.onDataChannel = (channel) {
-        _dataChannel = channel;
-        _setupDataChannel(channel);
-      };
-
-      final offerMap = jsonDecode(offerJson);
-      await _peerConnection!.setRemoteDescription(
-          RTCSessionDescription(offerMap['sdp'], 'offer'));
-
-      RTCSessionDescription answer =
-          await _peerConnection!.createAnswer(_constraints);
-      await _peerConnection!.setLocalDescription(answer);
-
-      // Wait for gathering
-      final answerTokenJson = await _waitForGathering();
-
-      // 3. Post Answer
-      final answerReq = await client.postUrl(Uri.parse('$url/answer'));
-      answerReq.headers.contentType = ContentType.json;
-      answerReq.write(answerTokenJson);
-      final answerRes = await answerReq.close();
-
-      if (answerRes.statusCode == 200) {
-        return {'success': true};
-      } else {
-        return {
-          'success': false,
-          'error': 'Failed to send answer: ${answerRes.statusCode}'
-        };
-      }
-    } catch (e) {
-      return {'success': false, 'error': e.toString()};
     }
   }
 
@@ -438,6 +296,39 @@ class WebRTCService extends BaseFuickService {
       // Handle control commands
       try {
         final data = jsonDecode(message.text);
+
+        // Check if it's a chunk
+        if (data is Map && data['_chunk'] == true) {
+          final id = data['id'];
+          final idx = data['i'];
+          final total = data['t'];
+          final chunkData = data['d'];
+
+          if (!_chunkCache.containsKey(id)) {
+            _chunkCache[id] = List<String?>.filled(total, null);
+          }
+          _chunkCache[id]![idx] = chunkData;
+
+          // Check if complete
+          if (_chunkCache[id]!.every((c) => c != null)) {
+            final fullDataStr = _chunkCache[id]!.join('');
+            _chunkCache.remove(id);
+
+            // Process full data
+            try {
+              final fullData = jsonDecode(fullDataStr);
+              if (_isController) {
+                ControlService().processResponse(fullData);
+              } else {
+                ControlService().processCommand(fullData);
+              }
+            } catch (e) {
+              debugPrint('Error decoding reassembled chunk data: $e');
+            }
+          }
+          return;
+        }
+
         if (_isController) {
           ControlService().processResponse(data);
         } else {
@@ -491,11 +382,46 @@ class WebRTCService extends BaseFuickService {
 
   Future<bool> sendData(String data) async {
     if (!isDataChannelOpen) return false;
+
+    // Split into chunks of 12KB (safe limit to account for JSON wrapper overhead)
+    const chunkSize = 12 * 1024;
+
+    if (data.length <= chunkSize) {
+      try {
+        await _dataChannel!.send(RTCDataChannelMessage(data));
+        return true;
+      } catch (e) {
+        debugPrint('Error sending data via WebRTC: $e');
+        return false;
+      }
+    }
+
+    // Large data: Chunk it
+    final msgId = DateTime.now().millisecondsSinceEpoch.toString() +
+        '_' +
+        (data.length).toString();
+    final totalChunks = (data.length / chunkSize).ceil();
+
     try {
-      await _dataChannel!.send(RTCDataChannelMessage(data));
+      for (int i = 0; i < totalChunks; i++) {
+        final start = i * chunkSize;
+        final end =
+            (start + chunkSize < data.length) ? start + chunkSize : data.length;
+        final chunk = data.substring(start, end);
+
+        final chunkMsg = {
+          '_chunk': true,
+          'id': msgId,
+          'i': i,
+          't': totalChunks,
+          'd': chunk
+        };
+
+        await _dataChannel!.send(RTCDataChannelMessage(jsonEncode(chunkMsg)));
+      }
       return true;
     } catch (e) {
-      debugPrint('Error sending data via WebRTC: $e');
+      debugPrint('Error sending chunked data via WebRTC: $e');
       return false;
     }
   }
