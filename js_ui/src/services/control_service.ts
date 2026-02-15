@@ -1,45 +1,9 @@
 import { NativeEvent } from "fuickjs";
 
 export class ControlService {
-  static async startServer(port: number = 0): Promise<{ success: boolean; port: number; error?: string }> {
-    const result = await (globalThis as any).dartCallNativeAsync("Control.startServer", { port });
-    return result;
-  }
-
-  static async stopServer(): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNativeAsync("Control.stopServer", {});
-    return result === true;
-  }
-
-  static async connectToDevice(ip: string, port: number): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNativeAsync("Control.connect", {
-      ip,
-      port,
-    });
-    return result === true;
-  }
-
   static async disconnect(): Promise<boolean> {
     const result = await (globalThis as any).dartCallNativeAsync("Control.disconnect", {});
     return result === true;
-  }
-
-  static async connectRelay(
-    ip: string,
-    port: number,
-    deviceId: string,
-    isHost: boolean
-  ): Promise<{ success: boolean; error?: string }> {
-    const result = await (globalThis as any).dartCallNativeAsync(
-      "Control.connectRelay",
-      {
-        ip,
-        port,
-        deviceId,
-        isHost,
-      }
-    );
-    return result;
   }
 
   static async isConnected(): Promise<boolean> {
@@ -98,7 +62,9 @@ export class ControlService {
   }
 
   static async sendText(text: string): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNativeAsync("Control.sendText", { text });
+    const result = await (globalThis as any).dartCallNativeAsync("Control.sendText", {
+      text,
+    });
     return result === true;
   }
 
@@ -109,6 +75,11 @@ export class ControlService {
 
   static async openAccessibilitySettings(): Promise<boolean> {
     const result = await (globalThis as any).dartCallNativeAsync("Control.openAccessibilitySettings", {});
+    return result === true;
+  }
+
+  static async copyToClipboard(text: string): Promise<boolean> {
+    const result = await (globalThis as any).dartCallNativeAsync("Control.copyToClipboard", { text });
     return result === true;
   }
 

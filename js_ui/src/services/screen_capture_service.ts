@@ -3,7 +3,6 @@ import { ScreenFrame } from "../types";
 
 export class ScreenCaptureService {
   static async startCapture(params: {
-    port: number;
     quality?: number;
     maxWidth?: number;
     maxHeight?: number;

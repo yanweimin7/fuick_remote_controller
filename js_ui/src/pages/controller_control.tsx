@@ -22,6 +22,7 @@ import {
 import { NetworkService } from "../services/network_service";
 import { ControlService } from "../services/control_service";
 import { ScreenCaptureService } from "../services/screen_capture_service";
+import { WebRTCService } from "../services/webrtc_service";
 import { DeviceInfo, ScreenFrame } from "../types";
 
 interface ControllerControlPageProps {
@@ -45,6 +46,29 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
   const viewRef = useRef<any>(null);
   const frameCount = useRef(0);
   const lastTime = useRef(Date.now());
+
+  const connect = async () => {
+    if (!device) return;
+
+    // P2P connection is initiated before navigation
+    // We just need to check status and wait for events
+    const connected = await ControlService.isConnected();
+    if (connected) {
+      setIsConnected(true);
+      setIsConnecting(false);
+    } else {
+      // Still connecting...
+      setIsConnecting(true);
+      // Timeout after 30s
+      setTimeout(async () => {
+        const check = await ControlService.isConnected();
+        if (!check) {
+          setError("连接超时，请重试");
+          setIsConnecting(false);
+        }
+      }, 30000);
+    }
+  };
 
   useEffect(() => {
     if (device) {
@@ -86,15 +110,23 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
       }
     });
 
+    // WebRTC setup
+    // const unsubscribeWebRTC = WebRTCService.setup();
+
     // 监听连接状态
     const unsubscribeState = ControlService.onConnectionStateChange(
       (state, data) => {
         if (state === "connected") {
           setIsConnected(true);
           setIsConnecting(false);
+          // Start WebRTC Call only if not P2P (P2P uses manual token exchange)
+          if (device?.ip !== "P2P") {
+            WebRTCService.startCall(true);
+          }
         } else {
           setIsConnected(false);
           setError("连接已断开");
+          WebRTCService.stopCall();
         }
       }
     );
@@ -102,30 +134,11 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
     return () => {
       unsubscribe();
       unsubscribeState();
+      // unsubscribeWebRTC();
+      WebRTCService.stopCall();
       ControlService.disconnect();
     };
   }, [device]);
-
-  const connect = async () => {
-    if (!device) return;
-
-    // 检查是否已经连接
-    const connected = await ControlService.isConnected();
-    if (connected) {
-      setIsConnected(true);
-      setIsConnecting(false);
-      return;
-    }
-
-    setIsConnecting(true);
-    setError(null);
-
-    const success = await ControlService.connectToDevice(device.ip, device.port);
-    if (!success) {
-      setError("连接失败，请检查网络");
-      setIsConnecting(false);
-    }
-  };
 
   // 处理触摸事件 - 将坐标映射到被控端屏幕
   const handlePointerDown = (e: any) => {
