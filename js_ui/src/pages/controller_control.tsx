@@ -32,8 +32,6 @@ interface ControllerControlPageProps {
 export default function ControllerControlPage(props: ControllerControlPageProps) {
   const { device } = props;
   const navigator = useNavigator();
-  const [isConnecting, setIsConnecting] = useState(true);
-  const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [screenImage, setScreenImage] = useState<string | null>(null);
   const [screenSize, setScreenSize] = useState({ width: 0, height: 0 });
@@ -47,38 +45,14 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
   const frameCount = useRef(0);
   const lastTime = useRef(Date.now());
 
-  const connect = async () => {
-    if (!device) return;
-
-    // P2P connection is initiated before navigation
-    // We just need to check status and wait for events
-    const connected = await ControlService.isConnected();
-    if (connected) {
-      setIsConnected(true);
-      setIsConnecting(false);
-    } else {
-      // Still connecting...
-      setIsConnecting(true);
-      // Timeout after 30s
-      setTimeout(async () => {
-        const check = await ControlService.isConnected();
-        if (!check) {
-          setError("连接超时，请重试");
-          setIsConnecting(false);
-        }
-      }, 30000);
-    }
-  };
-
   useEffect(() => {
-    if (device) {
-      connect();
-    }
-
     // 监听屏幕帧数据
     const unsubscribe = ScreenCaptureService.onScreenFrame((frame: ScreenFrame) => {
+      // Log received frame details
       if (frame.data) {
-        setScreenImage(frame.data);
+        // Ensure no newlines in base64
+        const cleanData = frame.data.replace(/[\r\n]/g, "");
+        setScreenImage(cleanData);
       }
 
       // 计算 FPS
@@ -117,14 +91,11 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
     const unsubscribeState = ControlService.onConnectionStateChange(
       (state, data) => {
         if (state === "connected") {
-          setIsConnected(true);
-          setIsConnecting(false);
           // Start WebRTC Call only if not P2P (P2P uses manual token exchange)
           if (device?.ip !== "P2P") {
             WebRTCService.startCall(true);
           }
         } else {
-          setIsConnected(false);
           setError("连接已断开");
           WebRTCService.stopCall();
         }
@@ -240,49 +211,6 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
   const handleRecent = () => ControlService.sendRecent();
 
 
-  if (isConnecting) {
-    return (
-      <Scaffold
-        appBar={
-          <AppBar
-            title={<Text text="正在连接..." fontSize={20} fontWeight="bold" color="#FFFFFF" />}
-            leading={
-              <GestureDetector onTap={() => navigator.pop()}>
-                <Container padding={4}>
-                  <Icon name="arrow_back" size={24} color="#FFFFFF" />
-                </Container>
-              </GestureDetector>
-            }
-            backgroundColor="#1976D2"
-          />
-        }
-      >
-        <Container color="#000000">
-          <Column
-            mainAxisAlignment="center"
-            crossAxisAlignment="center"
-          >
-            <CircularProgressIndicator color="#1976D2" />
-            <Text
-              text="正在连接设备..."
-              fontSize={16}
-              color="#FFFFFF"
-              margin={{ top: 16 }}
-            />
-            {device && (
-              <Text
-                text={`${device.name} (${device.ip})`}
-                fontSize={12}
-                color="#888888"
-                margin={{ top: 8 }}
-              />
-            )}
-          </Column>
-        </Container>
-      </Scaffold>
-    );
-  }
-
   if (error) {
     return (
       <Scaffold
@@ -314,8 +242,18 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
               margin={{ top: 16 }}
             />
             <Button
-              text="重新连接"
-              onTap={connect}
+              text="返回"
+              onTap={() => navigator.pop()}
+              margin={{ top: 24 }}
+            />
+            <Button
+              text="Load Test Image"
+              onTap={() => {
+                // Base64 for a 1x1 red pixel
+                const testImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+                setScreenImage(testImage);
+                setError(null);
+              }}
               margin={{ top: 24 }}
             />
           </Column>
@@ -343,40 +281,45 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
       }
     >
       <Stack>
-        <Container color="#000000">
-          <VisibilityDetector
-            onVisibilityChanged={(info) => {
-              if (info.size.width !== localSize.width || info.size.height !== localSize.height) {
-                setLocalSize(info.size);
-                console.log(`[TS] Local size updated: ${info.size.width}x${info.size.height}`);
-              }
-            }}
-          >
-            <PointerListener
-              onPointerDown={(e: any) => handlePointerDown(e)}
-              onPointerUp={(e: any) => handlePointerUp(e)}
+        <Positioned left={0} right={0} top={0} bottom={0}>
+          <Container color="#000000">
+            <VisibilityDetector
+              onVisibilityChanged={(info) => {
+                if (info.size.width !== localSize.width || info.size.height !== localSize.height) {
+                  setLocalSize(info.size);
+                }
+              }}
             >
-              <Container alignment="center">
-                {screenImage ? (
-                  <Image
-                    url={`data:image/jpeg;base64,${screenImage}`}
-                    fit="contain"
-                  />
-                ) : (
-                  <Column mainAxisAlignment="center">
-                    <CircularProgressIndicator color="#1976D2" />
-                    <Text
-                      text="等待画面..."
-                      fontSize={14}
-                      color="#888888"
-                      margin={{ top: 16 }}
-                    />
-                  </Column>
-                )}
-              </Container>
-            </PointerListener>
-          </VisibilityDetector>
-        </Container>
+              <PointerListener
+                onPointerDown={(e: any) => handlePointerDown(e)}
+                onPointerUp={(e: any) => handlePointerUp(e)}
+              >
+                <Container alignment="center" width={localSize.width || 300} height={localSize.height || 600} color="#333333">
+                  {screenImage ? (
+                    <Stack>
+                      <Image
+                        url={screenImage}
+                        fit="contain"
+                        width={localSize.width || 300}
+                        height={localSize.height || 600}
+                      />
+                    </Stack>
+                  ) : (
+                    <Column mainAxisAlignment="center">
+                      <CircularProgressIndicator color="#1976D2" />
+                      <Text
+                        text="等待画面..."
+                        fontSize={14}
+                        color="#888888"
+                        margin={{ top: 16 }}
+                      />
+                    </Column>
+                  )}
+                </Container>
+              </PointerListener>
+            </VisibilityDetector>
+          </Container>
+        </Positioned>
 
         {/* 控制浮窗 */}
         {showControls && (

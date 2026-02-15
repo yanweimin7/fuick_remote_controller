@@ -157,6 +157,16 @@ class ControlService extends BaseFuickService {
   /// 被控端：发送屏幕帧数据给控制端
   void sendScreenFrame(Map<String, dynamic> frameData) {
     try {
+      final dataContent = frameData['data'];
+      int size = 0;
+      if (dataContent is List) {
+        size = dataContent.length;
+      } else if (dataContent is String) {
+        size = dataContent.length;
+      }
+      // debugPrint(
+      //     'ControlService: Sending screen frame via WebRTC (size: $size, ts: ${frameData['timestamp']})');
+
       final data = {
         'type': 'screen_frame',
         'data': frameData,
@@ -168,6 +178,9 @@ class ControlService extends BaseFuickService {
       if (webrtc.isDataChannelOpen) {
         webrtc.sendData(jsonStr);
         return;
+      } else {
+        debugPrint(
+            'ControlService: WebRTC DataChannel is NOT open, cannot send frame');
       }
     } catch (e) {
       debugPrint('ControlService: Error sending screen frame: $e');
@@ -250,6 +263,17 @@ class ControlService extends BaseFuickService {
   void processResponse(Map<String, dynamic> response) {
     // 检查是否是屏幕帧数据
     if (response['type'] == 'screen_frame') {
+      final frameData = response['data'] as Map;
+      final dataContent = frameData['data'];
+      int size = 0;
+      if (dataContent is List) {
+        size = dataContent.length;
+      } else if (dataContent is String) {
+        size = dataContent.length;
+      }
+      // debugPrint(
+      //    'ControlService: Emitting screen_frame to JS (img size: $size, ts: ${frameData['timestamp']})');
+
       controller
           ?.getService<NativeEventService>()
           ?.emit('screen_frame', response['data']);

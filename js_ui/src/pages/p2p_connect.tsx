@@ -15,6 +15,8 @@ import {
 import { WebRTCService } from "../services/webrtc_service";
 import { ControlService } from "../services/control_service";
 import { ScreenCaptureService } from "../services/screen_capture_service";
+import { NetworkService } from "../services/network_service";
+import { StorageService } from "../services/storage_service";
 
 const CustomButton = ({ text, onTap, backgroundColor, textColor, disabled, margin }: any) => (
   <GestureDetector onTap={disabled ? () => { } : onTap}>
@@ -37,279 +39,238 @@ const CustomButton = ({ text, onTap, backgroundColor, textColor, disabled, margi
   </GestureDetector>
 );
 
-export default function P2PConnectPage(props: any) {
+interface P2PConnectPageProps {
+  role?: "controller" | "controlee";
+}
+
+export default function P2PConnectPage(props: P2PConnectPageProps) {
   const navigator = useNavigator();
   const [role, setRole] = useState<"controller" | "controlee">(props.role || "controller");
-  const [step, setStep] = useState(1);
-  const [offerToken, setOfferToken] = useState("");
-  const [answerToken, setAnswerToken] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [connectedClient, setConnectedClient] = useState<any>(null);
+  const [deviceId, setDeviceId] = useState("Loading...");
+  const [targetId, setTargetId] = useState("");
+  const [status, setStatus] = useState("Disconnected");
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    if (role === "controlee") {
-      const removeListener = ControlService.onClientConnected(async (data) => {
-        if (data.status === "connected") {
-          setConnectedClient(data.client);
-          // Start capture
-          await ScreenCaptureService.startCapture({
-            quality: 50,
-            maxWidth: 720,
-            maxHeight: 1280,
-            frameRate: 30,
-          });
-        } else if (data.status === "disconnected") {
-          setConnectedClient(null);
-          await ScreenCaptureService.stopCapture();
+    // Load last target ID
+    StorageService.getString("lastTargetId").then(id => {
+      if (id) setTargetId(id);
+    });
+
+    // Initialize Signaling
+    initSignaling();
+
+    // Listen for WebRTC connection
+    let removeListener: () => void;
+
+    console.log("Setting up connection listeners for role:", role);
+
+    if (role === 'controller') {
+      removeListener = ControlService.onConnectionStateChange((state, data) => {
+        console.log("Controller: Connection state changed:", state, data);
+        if (state === "connected") {
+          setStatus("Connected via WebRTC");
+          setIsConnected(true);
+          navigator.push("/controller/control");
+        } else {
+          setStatus("Disconnected");
+          setIsConnected(false);
         }
       });
-      return () => {
-        removeListener();
-        ScreenCaptureService.stopCapture();
-      };
     } else {
-      ScreenCaptureService.stopCapture();
+      // Controlee side logic
+      removeListener = ControlService.onClientConnected(async (data) => {
+        console.log("Controlee: Client connection event:", data);
+        if (data.status === "connected") {
+          setStatus("Connected via WebRTC");
+          setIsConnected(true);
+
+          if (role === "controlee") {
+            // Start capture automatically for controlee
+            console.log("Controlee: Starting screen capture...");
+            try {
+              // Add a small delay to ensure UI is ready and connection is stable
+              await new Promise(resolve => setTimeout(resolve, 500));
+
+              await ScreenCaptureService.startCapture({
+                quality: 40,
+                maxWidth: 720,
+                maxHeight: 1280,
+                frameRate: 20,
+              });
+              console.log("Controlee: Screen capture started successfully");
+            } catch (e) {
+              console.error("Controlee: Failed to start screen capture:", e);
+              setStatus("Capture Start Failed");
+            }
+          }
+        } else if (data.status === "disconnected") {
+          setStatus("Disconnected");
+          setIsConnected(false);
+          if (role === "controlee") {
+            console.log("Controlee: Stopping screen capture...");
+            await ScreenCaptureService.stopCapture();
+          }
+        }
+      });
+
+      // Also listen for raw WebRTC state changes on Controlee side just in case
+      // Sometimes onClientConnected (DataChannel open) might fire before ICE completes or vice versa?
+      // Actually DataChannel open is the source of truth for 'connected'.
     }
+
+    return () => {
+      if (removeListener) removeListener();
+      NetworkService.disconnectSignaling();
+    };
   }, [role]);
 
-  const handleDisconnect = async () => {
-    await WebRTCService.stopCall();
-    await ScreenCaptureService.stopCapture();
-    setConnectedClient(null);
-    setStep(1);
-    setOfferToken("");
-    setAnswerToken("");
-  };
-
-  const handleCopy = async (text: string) => {
-    if (!text) return;
-    try {
-      await ControlService.copyToClipboard(text);
-      // Ideally show a toast
-    } catch (e) {
-      console.error("Copy failed", e);
+  const initSignaling = async () => {
+    setStatus("Connecting to Signaling Server...");
+    const connected = await NetworkService.connectSignaling(role);
+    if (connected) {
+      const id = await NetworkService.getDeviceId();
+      setDeviceId(id);
+      setStatus("Signaling Connected. Ready.");
+    } else {
+      setStatus("Signaling Connection Failed.");
     }
   };
 
-  // Manual Mode Handlers
-  const handleGenerateOffer = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      // Controller creates Offer
-      const token = await WebRTCService.createOfferToken();
-      setOfferToken(token);
-      setStep(2);
-    } catch (e: any) {
-      setError("生成失败: " + e.message);
-    } finally {
-      setLoading(false);
+  const handleConnect = async () => {
+    if (!targetId || targetId.length < 6) {
+      setStatus("Invalid Device ID");
+      return;
     }
-  };
 
-  const handleGenerateAnswer = async () => {
-    if (!offerToken) return;
-    setLoading(true);
-    setError("");
-    try {
-      // Controlee creates Answer based on Offer
-      const token = await WebRTCService.createAnswerToken(offerToken);
-      setAnswerToken(token);
-      setStep(2);
-    } catch (e: any) {
-      setError("生成失败: " + e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Save target ID
+    await StorageService.setString("lastTargetId", targetId);
 
-  const handleConnectManual = async () => {
-    if (!answerToken) return;
-    setLoading(true);
-    setError("");
-    try {
-      await WebRTCService.completeConnection(answerToken);
-      // Wait a bit for connection to stabilize
-      setTimeout(() => {
-        navigator.push("/controller/control", { device: { name: "P2P Device", ip: "P2P", port: 0 } });
-      }, 1000);
-    } catch (e: any) {
-      setError("连接失败: " + e.message);
-      setLoading(false);
-    }
+    setStatus(`Connecting to ${targetId}...`);
+    await NetworkService.connectToDevice(targetId);
   };
 
   return (
     <Scaffold
       appBar={
         <AppBar
-          title={<Text text="P2P 直连" fontSize={18} color="#FFFFFF" />}
+          title="Remote Control Connection"
           backgroundColor="#1976D2"
+          foregroundColor="#FFFFFF"
         />
       }
     >
-      <Container padding={16} color="#F5F5F5">
-        <Column>
-          <Container padding={16} decoration={{ color: "white", borderRadius: 8 }}>
+      <Container padding={{ all: 16 }}>
+        <Column crossAxisAlignment="stretch">
+
+          {/* Role Selection */}
+          <Container
+            padding={{ all: 12 }}
+            decoration={{ color: "#E3F2FD", borderRadius: 8 }}
+            margin={{ bottom: 20 }}
+          >
             <Column>
-              {/* Role Switcher */}
-              <Row margin={{ bottom: 20 }}>
-                <Expanded>
-                  <CustomButton
-                    text="我是控制端"
-                    backgroundColor={role === "controller" ? "#1976D2" : "#E0E0E0"}
-                    textColor={role === "controller" ? "#FFFFFF" : "#333333"}
-                    onTap={() => { setRole("controller"); setStep(1); setOfferToken(""); setAnswerToken(""); setError(""); }}
-                    margin={{ right: 8 }}
-                  />
-                </Expanded>
-                <Expanded>
-                  <CustomButton
-                    text="我是被控端"
-                    backgroundColor={role === "controlee" ? "#1976D2" : "#E0E0E0"}
-                    textColor={role === "controlee" ? "#FFFFFF" : "#333333"}
-                    onTap={() => { setRole("controlee"); setStep(1); setOfferToken(""); setAnswerToken(""); setError(""); }}
-                    margin={{ left: 8 }}
-                  />
-                </Expanded>
+              <Text text="Select Your Role:" fontSize={14} color="#1565C0" margin={{ bottom: 8 }} />
+              <Row mainAxisAlignment="spaceEvenly">
+                <GestureDetector onTap={() => setRole("controller")}>
+                  <Container
+                    padding={{ vertical: 8, horizontal: 16 }}
+                    decoration={{
+                      color: role === "controller" ? "#1565C0" : "#FFFFFF",
+                      borderRadius: 20,
+                      border: { width: 1, color: "#1565C0" }
+                    }}
+                  >
+                    <Text
+                      text="Controller"
+                      color={role === "controller" ? "#FFFFFF" : "#1565C0"}
+                      fontWeight="bold"
+                    />
+                  </Container>
+                </GestureDetector>
+
+                <GestureDetector onTap={() => setRole("controlee")}>
+                  <Container
+                    padding={{ vertical: 8, horizontal: 16 }}
+                    decoration={{
+                      color: role === "controlee" ? "#1565C0" : "#FFFFFF",
+                      borderRadius: 20,
+                      border: { width: 1, color: "#1565C0" }
+                    }}
+                  >
+                    <Text
+                      text="Controlled"
+                      color={role === "controlee" ? "#FFFFFF" : "#1565C0"}
+                      fontWeight="bold"
+                    />
+                  </Container>
+                </GestureDetector>
               </Row>
-
-              {error ? <Text text={error} color="red" margin={{ bottom: 10 }} /> : null}
-
-              {/* Manual Mode Content */}
-              <Column>
-                {role === "controller" ? (
-                  <Column>
-                    {step === 1 && (
-                      <Column>
-                        <Text text="1. 点击生成连接码，并发送给被控端。" color="#666" margin={{ bottom: 10 }} />
-                        <CustomButton
-                          text={loading ? "生成中..." : "生成连接码"}
-                          backgroundColor="#4CAF50"
-                          textColor="#FFFFFF"
-                          onTap={handleGenerateOffer}
-                          disabled={loading}
-                        />
-                      </Column>
-                    )}
-
-                    {step >= 2 && (
-                      <Column>
-                        <Text text="1. 连接码 (已压缩，点击复制):" fontSize={14} margin={{ bottom: 5 }} />
-                        <GestureDetector onTap={() => handleCopy(offerToken)}>
-                          <Container
-                            padding={8}
-                            decoration={{ border: { width: 1, color: "#ccc" }, borderRadius: 4 }}
-                            height={100}
-                          >
-                            <Text text={offerToken} fontSize={12} />
-                          </Container>
-                        </GestureDetector>
-
-                        <Text text="2. 输入被控端的响应码:" fontSize={14} margin={{ top: 20, bottom: 5 }} />
-                        <TextField
-                          text={answerToken}
-                          onChanged={setAnswerToken}
-                          hintText="在此粘贴响应码"
-                        />
-
-                        <CustomButton
-                          text={loading ? "连接中..." : "开始控制"}
-                          backgroundColor="#1976D2"
-                          textColor="#FFFFFF"
-                          margin={{ top: 20 }}
-                          onTap={handleConnectManual}
-                          disabled={loading || !answerToken}
-                        />
-                      </Column>
-                    )}
-                  </Column>
-                ) : (
-                  <Column>
-                    {connectedClient ? (
-                      <Column>
-                        <Container
-                          padding={24}
-                          decoration={{
-                            color: "#E8F5E9",
-                            borderRadius: 12,
-                            border: { width: 1, color: "#C8E6C9" },
-                          }}
-                          margin={{ bottom: 20 }}
-                        >
-                          <Column crossAxisAlignment="center">
-                            <Icon name="phonelink_setup" size={48} color="#4CAF50" />
-                            <Text
-                              text="已连接控制端"
-                              fontSize={20}
-                              fontWeight="bold"
-                              color="#2E7D32"
-                              margin={{ top: 16 }}
-                            />
-                            <Text
-                              text="屏幕正在共享中"
-                              fontSize={14}
-                              color="#666"
-                              margin={{ top: 8 }}
-                            />
-                          </Column>
-                        </Container>
-                        <CustomButton
-                          text="断开连接"
-                          backgroundColor="#D32F2F"
-                          textColor="#FFFFFF"
-                          onTap={handleDisconnect}
-                        />
-                      </Column>
-                    ) : (
-                      <Column>
-                        {step === 1 && (
-                          <Column>
-                            <Text text="1. 输入控制端的连接码:" fontSize={14} margin={{ bottom: 5 }} />
-                            <TextField
-                              text={offerToken}
-                              onChanged={setOfferToken}
-                              hintText="在此粘贴连接码"
-                            />
-                            <CustomButton
-                              text={loading ? "生成中..." : "生成响应码"}
-                              backgroundColor="#4CAF50"
-                              textColor="#FFFFFF"
-                              margin={{ top: 20 }}
-                              onTap={handleGenerateAnswer}
-                              disabled={loading || !offerToken}
-                            />
-                          </Column>
-                        )}
-
-                        {step === 2 && (
-                          <Column>
-                            <Text text="2. 响应码 (已压缩，点击复制):" fontSize={14} margin={{ bottom: 5 }} />
-                            <GestureDetector onTap={() => handleCopy(answerToken)}>
-                              <Container
-                                padding={8}
-                                decoration={{ border: { width: 1, color: "#ccc" }, borderRadius: 4 }}
-                                height={100}
-                              >
-                                <Text text={answerToken} fontSize={12} />
-                              </Container>
-                            </GestureDetector>
-                            <Text
-                              text="等待控制端连接..."
-                              color="green"
-                              textAlign="center"
-                              margin={{ top: 20 }}
-                            />
-                          </Column>
-                        )}
-                      </Column>
-                    )}
-                  </Column>
-                )}
-              </Column>
+              <Text
+                text={role === "controller" ? "You will control another device." : "Your screen will be shared."}
+                fontSize={12}
+                color="#1565C0"
+                margin={{ top: 12 }}
+                textAlign="center"
+              />
             </Column>
           </Container>
+
+          {/* Status */}
+          <Text text={`Status: ${status}`} color={status.includes("Failed") ? "red" : "#808080"} margin={{ bottom: 20 }} />
+
+          {/* Device ID Display */}
+          <Container
+            padding={{ all: 24 }}
+            decoration={{ color: "#F5F5F5", borderRadius: 12, border: { width: 1, color: "#DDDDDD" } }}
+            alignment="center"
+            margin={{ bottom: 30 }}
+          >
+            <Text text="My Device ID" color="#808080" fontSize={14} />
+            <Text text={deviceId} fontSize={32} fontWeight="bold" color="#333333" margin={{ top: 8 }} />
+            <Text text="Share this ID to connect" color="#808080" fontSize={12} margin={{ top: 8 }} />
+          </Container>
+
+          {/* Controller Input */}
+          {role === "controller" && !isConnected && (
+            <Column>
+              <Container
+                decoration={{
+                  border: { width: 1, color: "#CCCCCC" },
+                  borderRadius: 8,
+                  color: "#FFFFFF",
+                }}
+                padding={{ horizontal: 12 }}
+              >
+                <TextField
+                  text={targetId}
+                  onChanged={setTargetId}
+                  hintText="Enter Partner's Device ID"
+                />
+              </Container>
+              <CustomButton
+                text="Connect"
+                onTap={handleConnect}
+                margin={{ top: 16 }}
+                backgroundColor="#4CAF50"
+              />
+            </Column>
+          )}
+
+          {/* Connected State Actions */}
+          {isConnected && (
+            <CustomButton
+              text="Disconnect"
+              onTap={async () => {
+                await WebRTCService.stopCall();
+                setIsConnected(false);
+                setStatus("Disconnected");
+              }}
+              backgroundColor="#D32F2F"
+              margin={{ top: 20 }}
+            />
+          )}
+
         </Column>
       </Container>
     </Scaffold>

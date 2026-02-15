@@ -8,7 +8,7 @@ export class ScreenCaptureService {
     maxHeight?: number;
     frameRate?: number;
   }): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNative("ScreenCapture.startCapture", {
+    const result = await (globalThis as any).dartCallNativeAsync("ScreenCapture.startCapture", {
       quality: 80,
       maxWidth: 1280,
       maxHeight: 720,
@@ -19,16 +19,15 @@ export class ScreenCaptureService {
   }
 
   static async stopCapture(): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNative("ScreenCapture.stopCapture", {});
-    return result === true;
+    return await (globalThis as any).dartCallNativeAsync("ScreenCapture.stopCapture", {});
   }
 
   static onScreenFrame(callback: (frame: ScreenFrame) => void): () => void {
     const handleFrame = (data: any) => {
-      if (!data) return;
+      if (!data || !data.data) return;
 
       const frame: ScreenFrame = {
-        data: data.data,
+        data: `data:image/jpeg;base64,${data.data}`,
         timestamp: data.timestamp,
         width: data.width,
         height: data.height,

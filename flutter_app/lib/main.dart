@@ -6,6 +6,8 @@ import 'package:fuickjs_flutter/core/engine/engine.dart';
 import 'services/control_service.dart';
 import 'services/network_discovery_service.dart';
 import 'services/screen_capture_service.dart';
+import 'services/signaling_service.dart';
+import 'services/storage_service.dart';
 import 'services/webrtc_service.dart';
 
 void main() {
@@ -24,6 +26,8 @@ void main() {
   ControlService().register();
   NetworkDiscoveryService().register();
   WebRTCService().register();
+  SignalingService().register();
+  StorageService().register();
 
   runApp(const RemoteControlApp());
 }

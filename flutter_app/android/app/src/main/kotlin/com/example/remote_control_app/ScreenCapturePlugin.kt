@@ -351,23 +351,28 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
             bitmap.recycle()
 
             val processTime = System.currentTimeMillis() - startTime
-            if (processTime > 30) {
-                // android.util.Log.w("ScreenCapture", "Slow frame processing: ${processTime}ms, size: ${jpegData.size} bytes")
-            }
+            
+            android.util.Log.d("ScreenCapture", "Frame generated: ${jpegData.size} bytes, time: ${processTime}ms")
 
             // 发送数据给 Flutter 端
-            handler?.post {
+            // 必须切换到主线程发送 EventChannel 消息
+            activity?.runOnUiThread {
                 try {
+                    android.util.Log.d("ScreenCapture", "Sending frame to Flutter via EventChannel")
                     val result = HashMap<String, Any>()
                     result["data"] = jpegData
+                    result["timestamp"] = System.currentTimeMillis()
                     result["width"] = captureWidth
                     result["height"] = captureHeight
                     result["originalWidth"] = screenWidth
                     result["originalHeight"] = screenHeight
                     
                     if (eventSink != null) {
-                        eventSink?.success(result)
-                    } 
+                         eventSink?.success(result)
+                         android.util.Log.d("ScreenCapture", "Frame sent to Flutter successfully")
+                    } else {
+                         android.util.Log.e("ScreenCapture", "EventSink is null, cannot send frame")
+                    }
                 } catch (e: Exception) {
                     android.util.Log.e("ScreenCapture", "Error sending event", e)
                 } finally {

@@ -30,10 +30,17 @@ class WebRTCService extends BaseFuickService {
   // Cache for incoming chunks
   final Map<String, List<String?>> _chunkCache = {};
 
+  // Queue for remote candidates received before RemoteDescription is set
+  final List<RTCIceCandidate> _candidateQueue = [];
+
   // Configuration
   final Map<String, dynamic> _config = {
     'iceServers': [
       {'urls': 'stun:stun.l.google.com:19302'},
+      {'urls': 'stun:stun1.l.google.com:19302'},
+      {'urls': 'stun:stun2.l.google.com:19302'},
+      {'urls': 'stun:stun3.l.google.com:19302'},
+      {'urls': 'stun:stun4.l.google.com:19302'},
     ],
     'sdpSemantics': 'unified-plan',
   };
@@ -68,21 +75,6 @@ class WebRTCService extends BaseFuickService {
       final data = args['data'];
       return await sendControlData(data);
     });
-
-    registerAsyncMethod('createOfferToken', (args) async {
-      return await createOfferToken();
-    });
-
-    registerAsyncMethod('createAnswerToken', (args) async {
-      final offerToken = args['offerToken'];
-      return await createAnswerToken(offerToken);
-    });
-
-    registerAsyncMethod('completeConnection', (args) async {
-      final answerToken = args['answerToken'];
-      await completeConnection(answerToken);
-      return true;
-    });
   }
 
   void register() {
@@ -93,120 +85,32 @@ class WebRTCService extends BaseFuickService {
     _onSignal = callback;
   }
 
-  Completer<String>? _gatheringCompleter;
-
-  // Compression Helpers
-  String _compressToken(String jsonStr) {
-    final bytes = utf8.encode(jsonStr);
-    final compressed = GZipCodec().encode(bytes);
-    return base64Encode(compressed);
-  }
-
-  String _decompressToken(String token) {
-    try {
-      final compressed = base64Decode(token);
-      final bytes = GZipCodec().decode(compressed);
-      return utf8.decode(bytes);
-    } catch (e) {
-      // Fallback for uncompressed tokens (if any) or invalid data
-      debugPrint('Decompression failed, assuming uncompressed: $e');
-      return token;
-    }
-  }
-
-  Future<String> createOfferToken({bool isController = true}) async {
-    _isCaller = true;
-    _isController = isController;
-    _peerConnection = await createPeerConnection(_config, _constraints);
-
-    _gatheringCompleter = Completer<String>();
-
-    _peerConnection!.onIceGatheringState = (state) {
-      if (state == RTCIceGatheringState.RTCIceGatheringStateComplete) {
-        _completeGathering();
-      }
-    };
-
-    // Data Channel setup
-    RTCDataChannelInit dataChannelDict = RTCDataChannelInit()..ordered = true;
-    _dataChannel =
-        await _peerConnection!.createDataChannel('control', dataChannelDict);
-    _setupDataChannel(_dataChannel!);
-
-    RTCSessionDescription offer =
-        await _peerConnection!.createOffer(_constraints);
-    await _peerConnection!.setLocalDescription(offer);
-
-    final token = await _waitForGathering();
-    return _compressToken(token);
-  }
-
-  Future<String> createAnswerToken(String offerToken,
-      {bool isController = false}) async {
-    _isCaller = false;
-    _isController = isController;
-    _peerConnection = await createPeerConnection(_config, _constraints);
-
-    _gatheringCompleter = Completer<String>();
-
-    _peerConnection!.onIceGatheringState = (state) {
-      if (state == RTCIceGatheringState.RTCIceGatheringStateComplete) {
-        _completeGathering();
-      }
-    };
-
-    _peerConnection!.onDataChannel = (channel) {
-      _dataChannel = channel;
-      _setupDataChannel(channel);
-    };
-
-    // Decode offer
-    final jsonStr = _decompressToken(offerToken);
-    final offerMap = jsonDecode(jsonStr);
-    await _peerConnection!
-        .setRemoteDescription(RTCSessionDescription(offerMap['sdp'], 'offer'));
-
-    RTCSessionDescription answer =
-        await _peerConnection!.createAnswer(_constraints);
-    await _peerConnection!.setLocalDescription(answer);
-
-    final token = await _waitForGathering();
-    return _compressToken(token);
-  }
-
-  Future<void> completeConnection(String answerToken) async {
-    final jsonStr = _decompressToken(answerToken);
-    final answerMap = jsonDecode(jsonStr);
-    await _peerConnection!.setRemoteDescription(
-        RTCSessionDescription(answerMap['sdp'], 'answer'));
-  }
-
-  Future<String> _waitForGathering() async {
-    try {
-      // Wait up to 2 seconds for candidates (public STUN is fast)
-      await _gatheringCompleter!.future.timeout(Duration(seconds: 2));
-    } catch (e) {
-      // Timeout, just proceed
-    }
-    final desc = await _peerConnection!.getLocalDescription();
-    return jsonEncode({'sdp': desc!.sdp, 'type': desc.type});
-  }
-
-  void _completeGathering() {
-    if (_gatheringCompleter != null && !_gatheringCompleter!.isCompleted) {
-      _gatheringCompleter!.complete('done');
-    }
-  }
-
   Future<void> startCall(bool isCaller) async {
+    // debugPrint('WebRTCService: startCall(isCaller: $isCaller)');
+
+    // Close existing connection if any, but preserve the queue if we are starting fresh
+    // Actually, for a fresh start triggered by Offer, we might want to clear,
+    // but if candidates arrived just milliseconds after Offer but before this line executes?
+    // Safe to clear only if we are sure.
+    // Let's just close the PC and Stream, but keep the queue logic handled carefully.
+    if (_peerConnection != null) {
+      await _peerConnection!.close();
+      _peerConnection = null;
+    }
+    // Don't call stopCall() here because it clears _candidateQueue, which might already have
+    // candidates if they arrived while startCall was being scheduled.
+    // However, usually Offer comes first.
+
     _isCaller = isCaller;
     _isController = isCaller; // For legacy calls, Caller is Controller
 
     // Create Peer Connection
+    // debugPrint('WebRTCService: Creating PeerConnection...');
     _peerConnection = await createPeerConnection(_config, _constraints);
 
     // Setup Ice Candidate Handler
     _peerConnection!.onIceCandidate = (candidate) {
+      // debugPrint('WebRTCService: onIceCandidate: ${candidate.candidate}');
       _sendSignal({
         'type': 'candidate',
         'candidate': {
@@ -218,36 +122,48 @@ class WebRTCService extends BaseFuickService {
     };
 
     _peerConnection!.onIceConnectionState = (state) {
-      debugPrint('ICE Connection State: $state');
+      // debugPrint('WebRTCService: ICE Connection State: $state');
       controller
           ?.getService<NativeEventService>()
           ?.emit('webrtc_state', {'state': state.toString()});
     };
 
+    _peerConnection!.onConnectionState = (state) {
+      // debugPrint('WebRTCService: PeerConnection State: $state');
+    };
+
     // Handle Remote Stream (Controller side)
     _peerConnection!.onTrack = (event) {
       // Not using MediaStream for now, using DataChannel for frames
+      // debugPrint('WebRTCService: onTrack received');
     };
 
     // Setup Data Channel (for control commands)
     if (_isCaller) {
       // Controller creates data channel
+      // debugPrint('WebRTCService: Creating DataChannel "control"...');
       RTCDataChannelInit dataChannelDict = RTCDataChannelInit()..ordered = true;
       _dataChannel =
           await _peerConnection!.createDataChannel('control', dataChannelDict);
       _setupDataChannel(_dataChannel!);
 
       // Create Offer
+      // debugPrint('WebRTCService: Creating Offer...');
       RTCSessionDescription offer =
           await _peerConnection!.createOffer(_constraints);
+      // debugPrint('WebRTCService: Setting Local Description (Offer)...');
       await _peerConnection!.setLocalDescription(offer);
+
+      // debugPrint('WebRTCService: Sending Offer...');
       _sendSignal({
         'type': 'offer',
         'sdp': offer.sdp,
       });
     } else {
       // Controlee waits for data channel
+      // debugPrint('WebRTCService: Waiting for DataChannel...');
       _peerConnection!.onDataChannel = (channel) {
+        // debugPrint('WebRTCService: onDataChannel received: ${channel.label}');
         _dataChannel = channel;
         _setupDataChannel(channel);
       };
@@ -255,9 +171,11 @@ class WebRTCService extends BaseFuickService {
   }
 
   void _setupDataChannel(RTCDataChannel channel) {
+    // debugPrint('WebRTCService: _setupDataChannel for ${channel.label}');
     channel.onDataChannelState = (state) {
-      debugPrint('Data Channel State: $state');
+      // debugPrint('WebRTCService: Data Channel State: $state');
       if (state == RTCDataChannelState.RTCDataChannelOpen) {
+        // debugPrint('WebRTCService: Data Channel OPEN! Emitting connection events.');
         // Notify UI that connection is established
         if (_isController) {
           // Controller side
@@ -279,6 +197,7 @@ class WebRTCService extends BaseFuickService {
           });
         }
       } else if (state == RTCDataChannelState.RTCDataChannelClosed) {
+        // debugPrint('WebRTCService: Data Channel CLOSED.');
         if (_isController) {
           controller
               ?.getService<NativeEventService>()
@@ -292,7 +211,13 @@ class WebRTCService extends BaseFuickService {
     };
 
     channel.onMessage = (RTCDataChannelMessage message) {
-      if (message.isBinary) return;
+      if (message.isBinary) {
+        // debugPrint('WebRTCService: Received binary message (size: ${message.binary.length})');
+        return;
+      }
+
+      // debugPrint('WebRTCService: Received text message (length: ${message.text.length})');
+
       // Handle control commands
       try {
         final data = jsonDecode(message.text);
@@ -314,6 +239,8 @@ class WebRTCService extends BaseFuickService {
             final fullDataStr = _chunkCache[id]!.join('');
             _chunkCache.remove(id);
 
+            // debugPrint('WebRTCService: Full data reassembled (id: $id, size: ${fullDataStr.length})');
+
             // Process full data
             try {
               final fullData = jsonDecode(fullDataStr);
@@ -329,6 +256,7 @@ class WebRTCService extends BaseFuickService {
           return;
         }
 
+        // debugPrint('WebRTCService: Received non-chunked message');
         if (_isController) {
           ControlService().processResponse(data);
         } else {
@@ -336,17 +264,49 @@ class WebRTCService extends BaseFuickService {
         }
       } catch (e) {
         // Handle non-JSON data
+        debugPrint('WebRTCService: Error processing message: $e');
       }
     };
   }
 
   Future<void> handleSignal(Map<String, dynamic> data) async {
-    if (_peerConnection == null) return;
-
     final type = data['type'];
+
+    // Handle queued candidates if PeerConnection is not ready yet
+    if (_peerConnection == null) {
+      if (type == 'candidate') {
+        debugPrint(
+            'WebRTCService: Buffering candidate (PeerConnection not ready)');
+        final candidateMap = data['candidate'];
+        RTCIceCandidate candidate = RTCIceCandidate(
+          candidateMap['candidate'],
+          candidateMap['sdpMid'],
+          candidateMap['sdpMLineIndex'] as int?,
+        );
+        _candidateQueue.add(candidate);
+      } else if (type == 'offer') {
+        // If PeerConnection is null and we receive an Offer, we should ideally startCall here.
+        // But startCall is handled in SignalingService.
+        // We can proceed to setRemoteDescription if startCall finished concurrently?
+        // No, if _peerConnection is null, we can't do anything.
+        // This implies startCall failed or hasn't started.
+        // In SignalingService logic: startCall() is awaited, THEN handleSignal() is called.
+        // So if we are here with 'offer' and PC is null, something is very wrong (startCall failed).
+        debugPrint('WebRTCService: Received Offer but PeerConnection is null!');
+      } else {
+        debugPrint(
+            'WebRTCService: Dropping signal $type (PeerConnection is null)');
+      }
+      return;
+    }
+
     if (type == 'offer') {
       await _peerConnection!
           .setRemoteDescription(RTCSessionDescription(data['sdp'], 'offer'));
+
+      // Process queued candidates
+      await _processCandidateQueue();
+
       RTCSessionDescription answer =
           await _peerConnection!.createAnswer(_constraints);
       await _peerConnection!.setLocalDescription(answer);
@@ -357,6 +317,9 @@ class WebRTCService extends BaseFuickService {
     } else if (type == 'answer') {
       await _peerConnection!
           .setRemoteDescription(RTCSessionDescription(data['sdp'], 'answer'));
+
+      // Process queued candidates
+      await _processCandidateQueue();
     } else if (type == 'candidate') {
       final candidateMap = data['candidate'];
       RTCIceCandidate candidate = RTCIceCandidate(
@@ -364,8 +327,32 @@ class WebRTCService extends BaseFuickService {
         candidateMap['sdpMid'],
         candidateMap['sdpMLineIndex'] as int?,
       );
-      await _peerConnection!.addCandidate(candidate);
+
+      if (await _peerConnection!.getRemoteDescription() != null) {
+        try {
+          await _peerConnection!.addCandidate(candidate);
+        } catch (e) {
+          debugPrint('WebRTCService: Error adding candidate: $e');
+        }
+      } else {
+        debugPrint(
+            'WebRTCService: Buffering candidate (RemoteDescription not set)');
+        _candidateQueue.add(candidate);
+      }
     }
+  }
+
+  Future<void> _processCandidateQueue() async {
+    debugPrint(
+        'WebRTCService: Processing ${_candidateQueue.length} queued candidates');
+    for (var candidate in _candidateQueue) {
+      try {
+        await _peerConnection!.addCandidate(candidate);
+      } catch (e) {
+        debugPrint('WebRTCService: Error adding queued candidate: $e');
+      }
+    }
+    _candidateQueue.clear();
   }
 
   void _sendSignal(Map<String, dynamic> data) {
@@ -440,6 +427,8 @@ class WebRTCService extends BaseFuickService {
       _localStream = null;
       _remoteStream?.dispose();
       _remoteStream = null;
+      _candidateQueue.clear();
+      _chunkCache.clear();
     } catch (e) {
       debugPrint(e.toString());
     }

@@ -12,6 +12,7 @@ import {
 
 import ControllerControlPage from "./pages/controller_control";
 import P2PConnectPage from "./pages/p2p_connect";
+import OneClickConnectPage from "./pages/one_click_connect";
 
 // 全局错误处理 UI
 const CustomErrorUI = (error: Error) =>
@@ -68,8 +69,11 @@ export function initApp() {
     Runtime.bindGlobals();
     setGlobalErrorFallback(CustomErrorUI);
 
-    // 首页直接显示 P2P 连接页面
-    Router.register("/", (args) => React.createElement(P2PConnectPage, args as any));
+    // 首页直接显示 One Click 连接页面
+    Router.register("/", (args) => React.createElement(OneClickConnectPage, args as any));
+
+    // P2P 连接页面 (Legacy/Controlled Mode)
+    Router.register("/p2p", (args) => React.createElement(P2PConnectPage, args as any));
 
     // 控制页面
     Router.register("/controller/control", (args) =>
