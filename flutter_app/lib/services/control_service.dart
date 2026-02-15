@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:fuickjs_flutter/core/service/base_fuick_service.dart';
+import 'package:fuickjs_flutter/core/service/native_event_service.dart';
 import 'package:fuickjs_flutter/core/service/native_services.dart';
 import 'package:fuickjs_flutter/core/utils/extensions.dart';
 
@@ -25,47 +26,47 @@ class ControlService extends BaseFuickService {
 
   ControlService._internal() {
     // 启动控制服务器（被控端使用）
-    registerMethod('startServer', (args) async {
+    registerAsyncMethod('startServer', (args) async {
       final port = asIntOrNull(args['port']) ?? 0; // 0 表示自动分配端口
       return await startServer(port);
     });
 
     // 停止控制服务器
-    registerMethod('stopServer', (args) async {
+    registerAsyncMethod('stopServer', (args) async {
       return await stopServer();
     });
 
     // 连接到被控端（控制端使用）
-    registerMethod('connect', (args) async {
+    registerAsyncMethod('connect', (args) async {
       final ip = args['ip'];
       final port = asIntOrNull(args['port']) ?? 8080;
       return await connectToControlee(ip, port);
     });
 
     // 断开连接
-    registerMethod('disconnect', (args) async {
+    registerAsyncMethod('disconnect', (args) async {
       return await disconnect();
     });
 
     // 发送点击事件（控制端调用）
-    registerMethod('sendClick', (args) async {
+    registerAsyncMethod('sendClick', (args) async {
       final x = args['x'];
       final y = args['y'];
       return await sendClick(x, y);
     });
 
     // 发送滑动事件（控制端调用）
-    registerMethod('sendSwipe', (args) async {
+    registerAsyncMethod('sendSwipe', (args) async {
       final startX = args['startX'];
       final startY = args['startY'];
       final endX = args['endX'];
       final endY = args['endY'];
-      final duration = args['duration'] ?? 300;
+      final duration = asIntOrNull(args['duration']) ?? 300;
       return await sendSwipe(startX, startY, endX, endY, duration);
     });
 
     // 发送长按事件（控制端调用）
-    registerMethod('sendLongPress', (args) async {
+    registerAsyncMethod('sendLongPress', (args) async {
       final x = args['x'];
       final y = args['y'];
       final duration = args['duration'] ?? 1000;
@@ -73,22 +74,22 @@ class ControlService extends BaseFuickService {
     });
 
     // 发送返回键
-    registerMethod('sendBack', (args) async {
+    registerAsyncMethod('sendBack', (args) async {
       return await sendKey('back');
     });
 
     // 发送 Home 键
-    registerMethod('sendHome', (args) async {
+    registerAsyncMethod('sendHome', (args) async {
       return await sendKey('home');
     });
 
     // 发送最近任务键
-    registerMethod('sendRecent', (args) async {
+    registerAsyncMethod('sendRecent', (args) async {
       return await sendKey('recent');
     });
 
     // 发送文本输入
-    registerMethod('sendText', (args) async {
+    registerAsyncMethod('sendText', (args) async {
       final text = args['text'];
       return await sendText(text);
     });
@@ -98,6 +99,18 @@ class ControlService extends BaseFuickService {
 
     // 获取服务器状态
     registerMethod('isServerRunning', (args) => _isServerRunning);
+
+    // 检查 Accessibility 服务是否启用
+    registerAsyncMethod('isAccessibilityEnabled', (args) async {
+      final isEnabled = await _channel.invokeMethod('isAccessibilityEnabled');
+      return isEnabled == true;
+    });
+
+    // 打开 Accessibility 设置
+    registerAsyncMethod('openAccessibilitySettings', (args) async {
+      await _channel.invokeMethod('openAccessibilitySettings');
+      return true;
+    });
 
     // 获取服务器端口
     registerMethod('getServerPort', (args) => _serverPort);
@@ -115,12 +128,12 @@ class ControlService extends BaseFuickService {
       }
 
       // 检查 Accessibility 服务是否启用
-      // final isEnabled = await _channel.invokeMethod('isAccessibilityEnabled');
-      // if (isEnabled != true) {
-      //   // 引导用户开启 Accessibility 服务
-      //   await _channel.invokeMethod('openAccessibilitySettings');
-      //   return {'success': false, 'error': 'Accessibility service not enabled'};
-      // }
+      final isEnabled = await _channel.invokeMethod('isAccessibilityEnabled');
+      if (isEnabled != true) {
+        // 引导用户开启 Accessibility 服务
+        await _channel.invokeMethod('openAccessibilitySettings');
+        return {'success': false, 'error': 'Accessibility service not enabled'};
+      }
 
       _serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
       _serverPort = _serverSocket!.port;
@@ -129,7 +142,7 @@ class ControlService extends BaseFuickService {
       // 监听控制端连接
       _serverSocket!.listen(_onControlClientConnect);
 
-      print('Control server started on port $_serverPort');
+      // print('Control server started on port $_serverPort');
       return {'success': true, 'port': _serverPort};
     } catch (e) {
       print('Start server error: $e');
@@ -153,7 +166,7 @@ class ControlService extends BaseFuickService {
 
   /// 处理控制端连接
   void _onControlClientConnect(Socket socket) {
-    print('Control client connected: ${socket.remoteAddress}');
+    // print('Control client connected: ${socket.remoteAddress}');
     _serverClientSocket = socket;
 
     // 监听控制指令
@@ -169,37 +182,25 @@ class ControlService extends BaseFuickService {
           },
           onError: (e) => print('Control socket error: $e'),
           onDone: () {
-            print('Control client disconnected');
+            // print('Control client disconnected');
             _serverClientSocket = null;
-            try {
-              ctx.invoke('NativeEvent', 'receive', [
-                'onClientConnected',
-                {
-                  'status': 'disconnected',
-                }
-              ]);
-            } catch (e) {
-              debugPrint('Error emitting onClientConnected disconnected: $e');
-            }
+            controller
+                ?.getService<NativeEventService>()
+                ?.emit('onClientConnected', {
+              'status': 'disconnected',
+            });
           },
         );
 
     // 通知 JS 层有控制端连接
-    try {
-      ctx.invoke('NativeEvent', 'receive', [
-        'onClientConnected',
-        {
-          'status': 'connected',
-          'client': {
-            'address': socket.remoteAddress.address,
-            'port': socket.remotePort,
-            'name': '远程控制端',
-          }
-        }
-      ]);
-    } catch (e) {
-      debugPrint('Error emitting onClientConnected: $e');
-    }
+    controller?.getService<NativeEventService>()?.emit('onClientConnected', {
+      'status': 'connected',
+      'client': {
+        'address': socket.remoteAddress.address,
+        'port': socket.remotePort,
+        'name': '远程控制端',
+      }
+    });
   }
 
   /// 处理控制数据
@@ -211,12 +212,12 @@ class ControlService extends BaseFuickService {
 
       switch (action) {
         case 'click':
-          print(
-              'ControlService: Injecting click at ${params['x']}, ${params['y']}');
+          // print(
+          //     'ControlService: Injecting click at ${params['x']}, ${params['y']}');
           await _injectClick(params['x'], params['y']);
           break;
         case 'swipe':
-          print('ControlService: Injecting swipe');
+          // print('ControlService: Injecting swipe');
           await _injectSwipe(
             params['startX'],
             params['startY'],
@@ -275,8 +276,8 @@ class ControlService extends BaseFuickService {
 
       final now = DateTime.now();
       if (now.difference(_lastLogTime).inSeconds >= 1) {
-        print(
-            'ControlService: Send FPS: $_frameCount, Rate: ${(_totalBytes / 1024).toStringAsFixed(1)} KB/s');
+        // print(
+        //    'ControlService: Send FPS: $_frameCount, Rate: ${(_totalBytes / 1024).toStringAsFixed(1)} KB/s');
         _frameCount = 0;
         _totalBytes = 0;
         _lastLogTime = now;
@@ -290,13 +291,13 @@ class ControlService extends BaseFuickService {
 
   /// 连接到被控端
   Future<bool> connectToControlee(String ip, int port) async {
-    print('Connecting to $ip:$port...');
+    // print('Connecting to $ip:$port...');
     try {
       await disconnect();
       // 增加超时时间到 10 秒
       _clientSocket =
           await Socket.connect(ip, port, timeout: Duration(seconds: 10));
-      print('Connected to $ip:$port successfully');
+      // print('Connected to $ip:$port successfully');
 
       // 监听被控端响应
       _clientSocket!
@@ -310,36 +311,24 @@ class ControlService extends BaseFuickService {
           }
         },
         onError: (e) {
-          print('Connection error: $e');
+          // print('Connection error: $e');
           _clientSocket = null;
-          try {
-            ctx.invoke('NativeEvent', 'receive', [
-              'disconnected',
-              {'error': e.toString()}
-            ]);
-          } catch (e) {
-            debugPrint('Error emitting disconnected on error: $e');
-          }
+          controller
+              ?.getService<NativeEventService>()
+              ?.emit('disconnected', {'error': e.toString()});
         },
         onDone: () {
-          print('Disconnected from controlee');
+          // print('Disconnected from controlee');
           _clientSocket = null;
-          try {
-            ctx.invoke('NativeEvent', 'receive', ['disconnected', {}]);
-          } catch (e) {
-            debugPrint('Error emitting disconnected: $e');
-          }
+          controller
+              ?.getService<NativeEventService>()
+              ?.emit('disconnected', {});
         },
       );
 
-      try {
-        ctx.invoke('NativeEvent', 'receive', [
-          'connected',
-          {'ip': ip, 'port': port}
-        ]);
-      } catch (e) {
-        debugPrint('Error emitting connected: $e');
-      }
+      controller
+          ?.getService<NativeEventService>()
+          ?.emit('connected', {'ip': ip, 'port': port});
       return true;
     } catch (e) {
       print('Connect error: $e');
@@ -365,7 +354,7 @@ class ControlService extends BaseFuickService {
 
   /// 发送点击事件
   Future<bool> sendClick(double x, double y) async {
-    print('wine send commne ');
+    // print('wine send commne ');
     return _sendCommand({
       'action': 'click',
       'params': {'x': x, 'y': y}
@@ -444,29 +433,24 @@ class ControlService extends BaseFuickService {
 
         final now = DateTime.now();
         if (now.difference(_receiveLastLogTime).inSeconds >= 1) {
-          print(
-              'ControlService: Receive FPS: $_receiveFrameCount, Rate: ${(_receiveTotalBytes / 1024).toStringAsFixed(1)} KB/s');
+          // print(
+          //     'ControlService: Receive FPS: $_receiveFrameCount, Rate: ${(_receiveTotalBytes / 1024).toStringAsFixed(1)} KB/s');
           _receiveFrameCount = 0;
           _receiveTotalBytes = 0;
           _receiveLastLogTime = now;
         }
 
-        try {
-          ctx.invoke(
-              'NativeEvent', 'receive', ['screen_frame', response['data']]);
-        } catch (e) {
-          debugPrint('Error emitting screen_frame: $e');
-        }
+        controller
+            ?.getService<NativeEventService>()
+            ?.emit('screen_frame', response['data']);
         return;
       }
 
-      print('ControlService: Received data: $data');
+      // print('ControlService: Received data: $data');
 
-      try {
-        ctx.invoke('NativeEvent', 'receive', ['command_response', response]);
-      } catch (e) {
-        debugPrint('Error emitting command_response: $e');
-      }
+      controller
+          ?.getService<NativeEventService>()
+          ?.emit('command_response', response);
     } catch (e) {
       print('Parse response error: $e');
     }

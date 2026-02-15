@@ -11,10 +11,13 @@ import {
   CircularProgressIndicator,
   Scaffold,
   AppBar,
+  SizedBox,
   Expanded,
   Stack,
   Positioned,
   useNavigator,
+  PointerListener,
+  VisibilityDetector,
 } from "fuickjs";
 import { NetworkService } from "../services/network_service";
 import { ControlService } from "../services/control_service";
@@ -33,6 +36,8 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
   const [error, setError] = useState<string | null>(null);
   const [screenImage, setScreenImage] = useState<string | null>(null);
   const [screenSize, setScreenSize] = useState({ width: 0, height: 0 });
+  const [originalScreenSize, setOriginalScreenSize] = useState({ width: 0, height: 0 });
+  const [localSize, setLocalSize] = useState({ width: 0, height: 0 });
   const [showControls, setShowControls] = useState(true);
   const [fps, setFps] = useState(0);
 
@@ -66,6 +71,15 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
         const newWidth = frame.width;
         const newHeight = frame.height;
         setScreenSize((prev) => {
+          if (prev.width === newWidth && prev.height === newHeight) return prev;
+          return { width: newWidth, height: newHeight };
+        });
+      }
+
+      if (typeof frame.originalWidth === 'number' && typeof frame.originalHeight === 'number') {
+        const newWidth = frame.originalWidth;
+        const newHeight = frame.originalHeight;
+        setOriginalScreenSize((prev) => {
           if (prev.width === newWidth && prev.height === newHeight) return prev;
           return { width: newWidth, height: newHeight };
         });
@@ -114,45 +128,85 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
   };
 
   // 处理触摸事件 - 将坐标映射到被控端屏幕
-  const handleTouchStart = (e: any) => {
-    const { x, y } = getRelativeCoordinates(e);
-    touchStartPos.current = { x, y };
-  };
+  const handlePointerDown = (e: any) => {
+    if (localSize.width && localSize.height && screenSize.width && screenSize.height) {
+      // Calculate scale to fit (contain)
+      const scaleX = localSize.width / screenSize.width;
+      const scaleY = localSize.height / screenSize.height;
+      const scale = Math.min(scaleX, scaleY);
 
-  const handleTouchEnd = async (e: any) => {
-    const { x, y } = getRelativeCoordinates(e);
-    const startX = touchStartPos.current.x;
-    const startY = touchStartPos.current.y;
+      const renderedW = screenSize.width * scale;
+      const renderedH = screenSize.height * scale;
 
-    // 判断是点击还是滑动
-    const distance = Math.sqrt(
-      Math.pow(x - startX, 2) + Math.pow(y - startY, 2)
-    );
+      const offsetX = (localSize.width - renderedW) / 2;
+      const offsetY = (localSize.height - renderedH) / 2;
 
-    if (distance < 10) {
-      // 点击
-      await sendClick(x, y);
-    } else {
-      // 滑动
-      await sendSwipe(startX, startY, x, y);
+      // Local position relative to the container
+      const localX = e.localPosition.dx;
+      const localY = e.localPosition.dy;
+
+      // Map to remote coordinates
+      let remoteX = (localX - offsetX) / scale;
+      let remoteY = (localY - offsetY) / scale;
+
+      // Scale to original screen size if available
+      if (originalScreenSize.width && originalScreenSize.height) {
+        remoteX = remoteX * (originalScreenSize.width / screenSize.width);
+        remoteY = remoteY * (originalScreenSize.height / screenSize.height);
+      } else {
+        remoteX = remoteX * 2;
+        remoteY = remoteY * 2;
+      }
+
+      touchStartPos.current = { x: remoteX, y: remoteY };
     }
   };
 
-  const getRelativeCoordinates = (e: any) => {
-    // 将触摸坐标转换为相对于视图的比例 (0-1)
-    // 然后映射到被控端屏幕分辨率
-    const layout = e.nativeEvent?.layout;
-    if (!layout || !screenSize.width) {
-      return { x: 0, y: 0 };
+  const handlePointerUp = async (e: any) => {
+    if (localSize.width && localSize.height && screenSize.width && screenSize.height) {
+      // Calculate scale to fit (contain)
+      const scaleX = localSize.width / screenSize.width;
+      const scaleY = localSize.height / screenSize.height;
+      const scale = Math.min(scaleX, scaleY);
+
+      const renderedW = screenSize.width * scale;
+      const renderedH = screenSize.height * scale;
+
+      const offsetX = (localSize.width - renderedW) / 2;
+      const offsetY = (localSize.height - renderedH) / 2;
+
+      // Local position relative to the container
+      const localX = e.localPosition.dx;
+      const localY = e.localPosition.dy;
+
+      // Map to remote coordinates
+      let remoteX = (localX - offsetX) / scale;
+      let remoteY = (localY - offsetY) / scale;
+
+      // Scale to original screen size if available
+      if (originalScreenSize.width && originalScreenSize.height) {
+        remoteX = remoteX * (originalScreenSize.width / screenSize.width);
+        remoteY = remoteY * (originalScreenSize.height / screenSize.height);
+      } else {
+        remoteX = remoteX * 2;
+        remoteY = remoteY * 2;
+      }
+
+      const startX = touchStartPos.current.x;
+      const startY = touchStartPos.current.y;
+
+      const distance = Math.sqrt(
+        Math.pow(remoteX - startX, 2) + Math.pow(remoteY - startY, 2)
+      );
+
+      if (distance < 10) {
+        // Click
+        await sendClick(remoteX, remoteY);
+      } else {
+        // Swipe
+        await sendSwipe(startX, startY, remoteX, remoteY);
+      }
     }
-
-    const scaleX = screenSize.width / layout.width;
-    const scaleY = screenSize.height / layout.height;
-
-    return {
-      x: e.x * scaleX,
-      y: e.y * scaleY,
-    };
   };
 
   const sendClick = async (x: number, y: number) => {
@@ -277,30 +331,38 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
     >
       <Stack>
         <Container color="#000000">
-          <GestureDetector
-            onPanStart={(e: any) => handleTouchStart(e)}
-            onPanEnd={(e: any) => handleTouchEnd(e)}
+          <VisibilityDetector
+            onVisibilityChanged={(info) => {
+              if (info.size.width !== localSize.width || info.size.height !== localSize.height) {
+                setLocalSize(info.size);
+                console.log(`[TS] Local size updated: ${info.size.width}x${info.size.height}`);
+              }
+            }}
           >
-            <Container alignment="center">
-              {screenImage ? (
-                <Image
-                  url={`data:image/jpeg;base64,${screenImage}`}
-                  gaplessPlayback={true} 
-                  fit="contain"
-                />
-              ) : (
-                <Column mainAxisAlignment="center">
-                  <CircularProgressIndicator color="#1976D2" />
-                  <Text
-                    text="等待画面..."
-                    fontSize={14}
-                    color="#888888"
-                    margin={{ top: 16 }}
+            <PointerListener
+              onPointerDown={(e: any) => handlePointerDown(e)}
+              onPointerUp={(e: any) => handlePointerUp(e)}
+            >
+              <Container alignment="center">
+                {screenImage ? (
+                  <Image
+                    url={`data:image/jpeg;base64,${screenImage}`}
+                    fit="contain"
                   />
-                </Column>
-              )}
-            </Container>
-          </GestureDetector>
+                ) : (
+                  <Column mainAxisAlignment="center">
+                    <CircularProgressIndicator color="#1976D2" />
+                    <Text
+                      text="等待画面..."
+                      fontSize={14}
+                      color="#888888"
+                      margin={{ top: 16 }}
+                    />
+                  </Column>
+                )}
+              </Container>
+            </PointerListener>
+          </VisibilityDetector>
         </Container>
 
         {/* 控制浮窗 */}

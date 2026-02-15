@@ -15,7 +15,6 @@ import ControllerHomePage from "./pages/controller_home";
 import ControllerConnectPage from "./pages/controller_connect";
 import ControllerControlPage from "./pages/controller_control";
 import ControleeHomePage from "./pages/controlee_home";
-import ControleeWaitingPage from "./pages/controlee_waiting";
 
 // 全局错误处理 UI
 const CustomErrorUI = (error: Error) =>
@@ -87,11 +86,8 @@ export function initApp() {
     Router.register("/controlee", () =>
       React.createElement(ControleeHomePage)
     );
-    Router.register("/controlee/waiting", (args) =>
-      React.createElement(ControleeWaitingPage, args as any)
-    );
 
-    console.log("[RemoteControl] App initialized");
+    // console.log("[RemoteControl] App initialized");
   } catch (e) {
     console.error("[RemoteControl] Init error:", e);
   }

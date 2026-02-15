@@ -61,7 +61,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
 
     // FlutterPlugin 接口实现
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        android.util.Log.d("ScreenCapture", "onAttachedToEngine")
+        // android.util.Log.d("ScreenCapture", "onAttachedToEngine")
         val messenger = binding.binaryMessenger
         
         val mChannel = MethodChannel(messenger, CHANNEL_NAME)
@@ -74,7 +74,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        android.util.Log.d("ScreenCapture", "onDetachedFromEngine")
+        // android.util.Log.d("ScreenCapture", "onDetachedFromEngine")
         methodChannel?.setMethodCallHandler(null)
         eventChannel?.setStreamHandler(null)
         methodChannel = null
@@ -83,24 +83,24 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
 
     // ActivityAware 接口实现
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
-        android.util.Log.d("ScreenCapture", "onAttachedToActivity")
+        // android.util.Log.d("ScreenCapture", "onAttachedToActivity")
         activity = binding.activity
         binding.addActivityResultListener(this)
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
-        android.util.Log.d("ScreenCapture", "onDetachedFromActivityForConfigChanges")
+        // android.util.Log.d("ScreenCapture", "onDetachedFromActivityForConfigChanges")
         activity = null
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
-        android.util.Log.d("ScreenCapture", "onReattachedToActivityForConfigChanges")
+        // android.util.Log.d("ScreenCapture", "onReattachedToActivityForConfigChanges")
         activity = binding.activity
         binding.addActivityResultListener(this)
     }
 
     override fun onDetachedFromActivity() {
-        android.util.Log.d("ScreenCapture", "onDetachedFromActivity")
+        // android.util.Log.d("ScreenCapture", "onDetachedFromActivity")
         activity = null
     }
     private var mediaProjection: MediaProjection? = null
@@ -113,6 +113,8 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
 
     private var captureWidth = 1280
     private var captureHeight = 720
+    private var screenWidth = 0
+    private var screenHeight = 0
     private var captureQuality = 80
     private var frameRate = 30
     private var isCapturing = false
@@ -160,13 +162,13 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
      * 开始屏幕捕获
      */
     private fun startCapture(call: MethodCall, result: MethodChannel.Result) {
-        android.util.Log.d("ScreenCapture", "startCapture called, isCapturing=$isCapturing")
+        // android.util.Log.d("ScreenCapture", "startCapture called, isCapturing=$isCapturing")
         
         // 强制重置帧处理状态，防止上次异常导致的死锁
         isProcessingFrame.set(false)
         
         if (isCapturing) {
-            android.util.Log.d("ScreenCapture", "Already capturing, ignoring request")
+            // android.util.Log.d("ScreenCapture", "Already capturing, ignoring request")
             result.success(true)
             return
         }
@@ -179,7 +181,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
 
         // 检查 MediaProjection 是否已准备就绪
         if (mediaProjection == null) {
-            android.util.Log.d("ScreenCapture", "MediaProjection is null, requesting permission first...")
+            // android.util.Log.d("ScreenCapture", "MediaProjection is null, requesting permission first...")
             // 如果 MediaProjection 未就绪，应该先请求权限，而不是直接报错
             // 但根据目前的逻辑，startCapture 应该在权限请求后调用
             // 这里我们尝试再次请求权限
@@ -205,8 +207,8 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
             @Suppress("DEPRECATION")
             activity.windowManager.defaultDisplay.getMetrics(displayMetrics)
         }
-        val screenWidth = displayMetrics.widthPixels
-        val screenHeight = displayMetrics.heightPixels
+        screenWidth = displayMetrics.widthPixels
+        screenHeight = displayMetrics.heightPixels
 
         // 初始化 Handler 和 Executor
         handler = Handler(Looper.getMainLooper())
@@ -220,7 +222,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
         captureQuality = 30 // 降低默认质量
  
 
-        android.util.Log.d("ScreenCapture", "Capture settings: ${captureWidth}x${captureHeight}, quality=$captureQuality")
+        // android.util.Log.d("ScreenCapture", "Capture settings: ${captureWidth}x${captureHeight}, quality=$captureQuality")
 
         // 创建 ImageReader
         // 注意：maxImages 至少为 2，为了更流畅，我们可以设为 3
@@ -260,7 +262,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 imageReader?.surface, null, null
             )
-            android.util.Log.d("ScreenCapture", "VirtualDisplay created: $virtualDisplay")
+            // android.util.Log.d("ScreenCapture", "VirtualDisplay created: $virtualDisplay")
             result.success(true)
         } catch (e: Exception) {
             android.util.Log.e("ScreenCapture", "Error creating VirtualDisplay", e)
@@ -340,7 +342,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
 
             val processTime = System.currentTimeMillis() - startTime
             if (processTime > 30) {
-                android.util.Log.w("ScreenCapture", "Slow frame processing: ${processTime}ms, size: ${jpegData.size} bytes")
+                // android.util.Log.w("ScreenCapture", "Slow frame processing: ${processTime}ms, size: ${jpegData.size} bytes")
             }
 
             // 发送数据给 Flutter 端
@@ -350,6 +352,8 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
                     result["data"] = jpegData
                     result["width"] = captureWidth
                     result["height"] = captureHeight
+                    result["originalWidth"] = screenWidth
+                    result["originalHeight"] = screenHeight
                     
                     if (eventSink != null) {
                         eventSink?.success(result)
@@ -410,10 +414,10 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
         if (requestCode != REQUEST_CODE) return false
 
         if (resultCode == Activity.RESULT_OK && data != null) {
-            android.util.Log.d("ScreenCapture", "Permission granted, getting MediaProjection")
+            // android.util.Log.d("ScreenCapture", "Permission granted, getting MediaProjection")
             try {
                 mediaProjection = mediaProjectionManager?.getMediaProjection(resultCode, data)
-                android.util.Log.d("ScreenCapture", "MediaProjection obtained: $mediaProjection")
+                // android.util.Log.d("ScreenCapture", "MediaProjection obtained: $mediaProjection")
                 pendingResult?.success(true)
             } catch (e: Exception) {
                 android.util.Log.e("ScreenCapture", "Error getting MediaProjection", e)
@@ -434,12 +438,12 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
 
     // EventChannel.StreamHandler
     override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-        android.util.Log.d("ScreenCapture", "EventChannel onListen: Sink established")
+        // android.util.Log.d("ScreenCapture", "EventChannel onListen: Sink established")
         eventSink = events
     }
 
     override fun onCancel(arguments: Any?) {
-        android.util.Log.d("ScreenCapture", "EventChannel onCancel: Sink destroyed")
+        // android.util.Log.d("ScreenCapture", "EventChannel onCancel: Sink destroyed")
         eventSink = null
     }
 }

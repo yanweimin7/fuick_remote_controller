@@ -26,7 +26,6 @@ export class ScreenCaptureService {
 
   static onScreenFrame(callback: (frame: ScreenFrame) => void): () => void {
     const handleFrame = (data: any) => {
-      // console.log(`[JS] ScreenCaptureService received frame, size: ${data?.data?.length}`);
       if (!data) return;
 
       const frame: ScreenFrame = {
@@ -34,6 +33,8 @@ export class ScreenCaptureService {
         timestamp: data.timestamp,
         width: data.width,
         height: data.height,
+        originalWidth: data.originalWidth,
+        originalHeight: data.originalHeight,
       };
       callback(frame);
     };

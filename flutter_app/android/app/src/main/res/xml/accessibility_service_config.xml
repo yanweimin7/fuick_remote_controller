@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/accessibility_service_description"
-    android:packageNames="com.example.remote_control_app"
     android:accessibilityEventTypes="typeAllMask"
-    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews|flagRequestTouchExplorationMode"
+    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
     android:settingsActivity="com.example.remote_control_app.MainActivity" />

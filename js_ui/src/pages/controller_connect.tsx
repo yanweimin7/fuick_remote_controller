@@ -42,7 +42,7 @@ export default function ControllerConnectPage(props: ControllerConnectPageProps)
     setError(null);
 
     const portNum = parseInt(port, 10);
-    console.log(`[Controller] Connecting to ${ip}:${portNum}...`);
+    // console.log(`[Controller] Connecting to ${ip}:${portNum}...`);
 
     // 设置一个前端超时保护，防止原生端卡死
     const timeoutPromise = new Promise<boolean>((resolve) => {
@@ -60,17 +60,17 @@ export default function ControllerConnectPage(props: ControllerConnectPageProps)
       setIsConnecting(false);
 
       if (result) {
-        console.log(`[Controller] Connected to ${ip}:${portNum} successfully`);
+        // console.log(`[Controller] Connected to ${ip}:${portNum} successfully`);
         // 跳转到控制页面
         navigator.push("/controller/control", {
           device: { name: device?.name || ip, ip, port: portNum },
         });
       } else {
-        console.error(`[Controller] Failed to connect to ${ip}:${portNum}`);
+        // console.error(`[Controller] Failed to connect to ${ip}:${portNum}`);
         setError("连接失败或超时，请确保：\n1. 两个设备在同一 Wi-Fi\n2. 被控端已开启服务\n3. 防火墙未拦截");
       }
     } catch (e) {
-      console.error(`[Controller] Connection error:`, e);
+      // console.error(`[Controller] Connection error:`, e);
       setIsConnecting(false);
       setError("连接发生异常，请重试");
     }

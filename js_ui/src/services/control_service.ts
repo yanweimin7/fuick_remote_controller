@@ -2,17 +2,17 @@ import { NativeEvent } from "fuickjs";
 
 export class ControlService {
   static async startServer(port: number = 0): Promise<{ success: boolean; port: number; error?: string }> {
-    const result = await (globalThis as any).dartCallNative("Control.startServer", { port });
+    const result = await (globalThis as any).dartCallNativeAsync("Control.startServer", { port });
     return result;
   }
 
   static async stopServer(): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNative("Control.stopServer", {});
+    const result = await (globalThis as any).dartCallNativeAsync("Control.stopServer", {});
     return result === true;
   }
 
   static async connectToDevice(ip: string, port: number): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNative("Control.connect", {
+    const result = await (globalThis as any).dartCallNativeAsync("Control.connect", {
       ip,
       port,
     });
@@ -20,7 +20,7 @@ export class ControlService {
   }
 
   static async disconnect(): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNative("Control.disconnect", {});
+    const result = await (globalThis as any).dartCallNativeAsync("Control.disconnect", {});
     return result === true;
   }
 
@@ -30,9 +30,10 @@ export class ControlService {
   }
 
   static async sendClick(x: number, y: number): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNative("Control.sendClick", {
+    const result = await (globalThis as any).dartCallNativeAsync("Control.sendClick", {
       x,
       y,
+      duration: 50,
     });
     return result === true;
   }
@@ -44,7 +45,7 @@ export class ControlService {
     endY: number,
     duration: number = 300
   ): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNative("Control.sendSwipe", {
+    const result = await (globalThis as any).dartCallNativeAsync("Control.sendSwipe", {
       startX,
       startY,
       endX,
@@ -55,17 +56,41 @@ export class ControlService {
   }
 
   static async sendBack(): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNative("Control.sendBack", {});
+    const result = await (globalThis as any).dartCallNativeAsync("Control.sendBack", {});
     return result === true;
   }
 
   static async sendHome(): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNative("Control.sendHome", {});
+    const result = await (globalThis as any).dartCallNativeAsync("Control.sendHome", {});
     return result === true;
   }
 
   static async sendRecent(): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNative("Control.sendRecent", {});
+    const result = await (globalThis as any).dartCallNativeAsync("Control.sendRecent", {});
+    return result === true;
+  }
+
+  static async sendLongPress(x: number, y: number, duration: number = 1000): Promise<boolean> {
+    const result = await (globalThis as any).dartCallNativeAsync("Control.sendLongPress", {
+      x,
+      y,
+      duration,
+    });
+    return result === true;
+  }
+
+  static async sendText(text: string): Promise<boolean> {
+    const result = await (globalThis as any).dartCallNativeAsync("Control.sendText", { text });
+    return result === true;
+  }
+
+  static async isAccessibilityEnabled(): Promise<boolean> {
+    const result = await (globalThis as any).dartCallNativeAsync("Control.isAccessibilityEnabled", {});
+    return result === true;
+  }
+
+  static async openAccessibilitySettings(): Promise<boolean> {
+    const result = await (globalThis as any).dartCallNativeAsync("Control.openAccessibilitySettings", {});
     return result === true;
   }
 

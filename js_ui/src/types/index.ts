@@ -11,6 +11,8 @@ export interface ScreenFrame {
   timestamp: number;
   width?: number;
   height?: number;
+  originalWidth?: number;
+  originalHeight?: number;
 }
 
 export interface ControlCommand {

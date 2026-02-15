@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 
 import 'package:flutter/services.dart';
@@ -94,10 +95,10 @@ class ScreenCaptureService extends BaseFuickService {
 
   /// 开始屏幕捕获
   Future<bool> startCapture(int port) async {
-    print('ScreenCapture: startCapture called with port $port');
+    // print('ScreenCapture: startCapture called with port $port');
     try {
       if (_isCapturing) {
-        print('ScreenCapture: Already capturing');
+        // print('ScreenCapture: Already capturing');
         return true;
       }
 
@@ -105,17 +106,17 @@ class ScreenCaptureService extends BaseFuickService {
       _setupFrameListener();
 
       // 2. 请求屏幕捕获权限（Android MediaProjection）
-      print('ScreenCapture: Requesting permission...');
+      // print('ScreenCapture: Requesting permission...');
       // 注意：这里可能会阻塞，直到用户授权
       final result = await _channel.invokeMethod('requestCapturePermission');
-      print('ScreenCapture: Permission result: $result');
+      // print('ScreenCapture: Permission result: $result');
       if (result != true) {
         _isCapturing = false;
         return false;
       }
 
       // 3. 启动屏幕捕获
-      print('ScreenCapture: Calling native startCapture...');
+      // print('ScreenCapture: Calling native startCapture...');
       await _channel.invokeMethod('startCapture', {
         'quality': _quality,
         'maxWidth': _maxWidth,
@@ -152,9 +153,6 @@ class ScreenCaptureService extends BaseFuickService {
   void _onFrameData(Map data) {
     if (!_isCapturing) return;
 
-    debugPrint(
-        'ScreenCapture: Received frame from native, timestamp: ${data['timestamp']}');
-
     // 恢复原始频率限制 (最高 25fps)
     final now = DateTime.now();
     if (_lastFrameTime != null &&
@@ -163,17 +161,31 @@ class ScreenCaptureService extends BaseFuickService {
     }
     _lastFrameTime = now;
 
+    // 尝试获取物理分辨率作为 fallback
+    int? originalWidth = data['originalWidth'];
+    int? originalHeight = data['originalHeight'];
+
+    if (originalWidth == null || originalWidth == 0) {
+      try {
+        final view = PlatformDispatcher.instance.views.first;
+        originalWidth = view.physicalSize.width.toInt();
+        originalHeight = view.physicalSize.height.toInt();
+      } catch (e) {
+        // ignore
+      }
+    }
+
     final bytes = data['data'] as Uint8List;
 
     final frameData = {
       'data': base64Encode(bytes),
-      'timestamp': data['timestamp'],
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
       'width': data['width'],
       'height': data['height'],
+      'originalWidth': originalWidth,
+      'originalHeight': originalHeight,
     };
 
-    debugPrint(
-        'ScreenCapture: Sending frame to ControlService, size: ${frameData['data'].toString().length}');
     ControlService().sendScreenFrame(frameData);
   }
 

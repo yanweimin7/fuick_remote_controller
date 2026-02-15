@@ -10,6 +10,7 @@ import {
   Scaffold,
   AppBar,
   useNavigator,
+  Button,
 } from "fuickjs";
 import { NetworkService } from "../services/network_service";
 import { ControlService } from "../services/control_service";
@@ -21,6 +22,7 @@ export default function ControleeHomePage() {
   const [serverPort, setServerPort] = useState(0);
   const [deviceInfo, setDeviceInfo] = useState<any>(null);
   const [isAnnouncing, setIsAnnouncing] = useState(false);
+  const [connectedClient, setConnectedClient] = useState<any>(null);
 
   useEffect(() => {
     loadDeviceInfo();
@@ -34,7 +36,6 @@ export default function ControleeHomePage() {
 
   const loadDeviceInfo = async () => {
     const info = await NetworkService.getDeviceInfo();
-    console.log("[Controlee] Device Info:", JSON.stringify(info));
     setDeviceInfo(info);
   };
 
@@ -49,17 +50,7 @@ export default function ControleeHomePage() {
       // 重新加载设备信息以获取最新的 IP
       await loadDeviceInfo();
 
-      // 开始屏幕捕获
-      // 降低分辨率和质量以提高 FPS
-      await ScreenCaptureService.startCapture({
-        port: 8811,
-        quality: 50, // 降低质量
-        maxWidth: 720, // 降低分辨率
-        maxHeight: 1280,
-        frameRate: 30, // 目标帧率
-      });
-
-      console.log("[Controlee] Server started and screen capture requested");
+      console.log("[Controlee] Server started");
     } else {
       alert("启动失败: " + (result?.error || "未知错误"));
     }
@@ -82,16 +73,32 @@ export default function ControleeHomePage() {
 
   // 监听连接状态
   useEffect(() => {
-    const removeListener = ControlService.onClientConnected((data) => {
-      console.log("[Controlee] Client connected:", data);
+    const removeListener = ControlService.onClientConnected(async (data) => {
       if (data.status === "connected") {
-        navigator.push("/controlee/waiting", {
-          deviceName: data.client?.name || "未知控制端",
+        setConnectedClient(data.client);
+        // 开始屏幕捕获
+        // 降低分辨率和质量以提高 FPS
+        await ScreenCaptureService.startCapture({
+          port: serverPort || 8811,
+          quality: 50, // 降低质量
+          maxWidth: 720, // 降低分辨率
+          maxHeight: 1280,
+          frameRate: 30, // 目标帧率
         });
+      } else if (data.status === "disconnected") {
+        setConnectedClient(null);
+        // 停止屏幕捕获
+        await ScreenCaptureService.stopCapture();
       }
     });
     return removeListener;
-  }, []);
+  }, [serverPort]);
+
+  const disconnectClient = async () => {
+    await ControlService.disconnect();
+    await ScreenCaptureService.stopCapture();
+    setConnectedClient(null);
+  };
 
 
   return (
@@ -203,6 +210,66 @@ export default function ControleeHomePage() {
                         fontSize={12}
                         color="#999999"
                         margin={{ top: 12 }}
+                      />
+                    </Column>
+                  </Container>
+                )}
+
+                {/* 已连接的控制端信息 */}
+                {connectedClient && (
+                  <Container
+                    margin={{ top: 16 }}
+                    padding={24}
+                    decoration={{
+                      color: "#FFFFFF",
+                      borderRadius: 12,
+                      boxShadow: {
+                        color: "#00000010",
+                        blurRadius: 8,
+                        offset: { dx: 0, dy: 2 },
+                      },
+                    }}
+                  >
+                    <Column crossAxisAlignment="center">
+                      <Row mainAxisAlignment="center" crossAxisAlignment="center">
+                        <Icon name="phonelink_setup" size={24} color="#4CAF50" />
+                        <Text
+                          text="已连接控制端"
+                          fontSize={16}
+                          fontWeight="bold"
+                          color="#333333"
+                          margin={{ left: 8 }}
+                        />
+                      </Row>
+
+                      <Container
+                        margin={{ top: 16, bottom: 16 }}
+                        padding={{ vertical: 12, horizontal: 24 }}
+                        decoration={{
+                          color: "#E8F5E9",
+                          borderRadius: 8,
+                          border: { width: 1, color: "#C8E6C9" },
+                        }}
+                      >
+                        <Column crossAxisAlignment="center">
+                          <Text
+                            text={connectedClient.name || "远程设备"}
+                            fontSize={18}
+                            fontWeight="bold"
+                            color="#2E7D32"
+                          />
+                          <Text
+                            text={`${connectedClient.address}:${connectedClient.port}`}
+                            fontSize={14}
+                            color="#666666"
+                            margin={{ top: 4 }}
+                          />
+                        </Column>
+                      </Container>
+
+                      <Button
+                        text="断开连接"
+                        onTap={disconnectClient}
                       />
                     </Column>
                   </Container>
