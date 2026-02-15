@@ -51,7 +51,7 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
         // 简化检查逻辑，直接看 Service 实例是否存在
         val service = RemoteControlAccessibilityService.instance
         val isEnabled = service != null
-        Log.d(TAG, "isAccessibilityEnabled: $isEnabled (Service instance: $service)")
+        // Log.d(TAG, "isAccessibilityEnabled: $isEnabled (Service instance: $service)")
         return isEnabled
     }
     
@@ -72,7 +72,7 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
         val x = call.argument<Double>("x")?.toFloat() ?: 0f
         val y = call.argument<Double>("y")?.toFloat() ?: 0f
         
-        Log.d(TAG, "injectClick: ($x, $y)")
+        // Log.d(TAG, "injectClick: ($x, $y)")
 
         val service = RemoteControlAccessibilityService.instance
         if (service == null) {
@@ -82,7 +82,7 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
         }
 
         val success = service.performClick(x, y)
-        Log.d(TAG, "injectClick result: $success")
+        // Log.d(TAG, "injectClick result: $success")
         result.success(success)
     }
 

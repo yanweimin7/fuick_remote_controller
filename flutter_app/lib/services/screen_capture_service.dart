@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -77,7 +76,7 @@ class ScreenCaptureService extends BaseFuickService {
   void _setupFrameListener() {
     if (_frameSubscription != null) return;
 
-    debugPrint('ScreenCapture: Setting up EventChannel listener');
+    // debugPrint('ScreenCapture: Setting up EventChannel listener');
     _frameSubscription = _eventChannel.receiveBroadcastStream().listen((data) {
       if (data is Map) {
         _onFrameData(data);
@@ -85,7 +84,7 @@ class ScreenCaptureService extends BaseFuickService {
     }, onError: (error) {
       debugPrint('ScreenCapture: EventChannel error: $error');
     }, onDone: () {
-      debugPrint('ScreenCapture: EventChannel closed');
+      // debugPrint('ScreenCapture: EventChannel closed');
       _frameSubscription = null;
     });
   }

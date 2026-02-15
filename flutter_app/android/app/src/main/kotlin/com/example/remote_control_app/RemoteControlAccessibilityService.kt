@@ -23,7 +23,7 @@ class RemoteControlAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        Log.i(TAG, "Accessibility service connected")
+        // Log.i(TAG, "Accessibility service connected")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -31,13 +31,13 @@ class RemoteControlAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        Log.i(TAG, "Accessibility service interrupted")
+        // Log.i(TAG, "Accessibility service interrupted")
     }
 
     override fun onDestroy() {
         super.onDestroy()
         instance = null
-        Log.i(TAG, "Accessibility service destroyed")
+        // Log.i(TAG, "Accessibility service destroyed")
     }
 
     /**

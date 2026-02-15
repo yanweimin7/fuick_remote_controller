@@ -32,14 +32,14 @@ class NetworkDiscoveryService extends BaseFuickService {
   /// 获取本机 IP 地址
   Future<String?> _getLocalIp() async {
     try {
-      print('NetworkDiscovery: Listing network interfaces...');
+      // print('NetworkDiscovery: Listing network interfaces...');
       String? bestIp;
 
       for (var interface in await NetworkInterface.list()) {
-        print('NetworkDiscovery: Found interface: ${interface.name}');
+        // print('NetworkDiscovery: Found interface: ${interface.name}');
         for (var addr in interface.addresses) {
           if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
-            print('NetworkDiscovery:   - ${addr.address} (${addr.type.name})');
+            // print('NetworkDiscovery:   - ${addr.address} (${addr.type.name})');
 
             // 优先选择 wlan0 (Android WiFi) 或 en0 (iOS WiFi) 或 eth0 (Ethernet)
             if (interface.name.startsWith('wlan') ||
@@ -54,7 +54,7 @@ class NetworkDiscoveryService extends BaseFuickService {
       }
 
       if (bestIp != null) {
-        print('NetworkDiscovery: Selected IP: $bestIp');
+        // print('NetworkDiscovery: Selected IP: $bestIp');
         return bestIp;
       }
     } catch (e) {

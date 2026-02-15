@@ -69,11 +69,11 @@ class SignalingService extends BaseFuickService {
 
     // Callbacks
     _client!.onConnected = () {
-      debugPrint('MQTT Connected');
+      // debugPrint('MQTT Connected');
       _subscribeToMyTopics();
     };
     _client!.onDisconnected = () {
-      debugPrint('MQTT Disconnected');
+      // debugPrint('MQTT Disconnected');
     };
 
     final connMess = MqttConnectMessage()
@@ -112,17 +112,17 @@ class SignalingService extends BaseFuickService {
 
     final myTopic = '$TOPIC_PREFIX/$_deviceId/#';
     _client!.subscribe(myTopic, MqttQos.atLeastOnce);
-    debugPrint('Subscribed to $myTopic');
+    // debugPrint('Subscribed to $myTopic');
   }
 
   void _onMessage(List<MqttReceivedMessage<MqttMessage?>>? c) {
     final recMess = c![0].payload as MqttPublishMessage;
     final pt =
         MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
-    final topic = c[0].topic;
+    // final topic = c[0].topic;
 
-    debugPrint('MQTT Message received on topic: $topic');
-    debugPrint('Payload: $pt');
+    // debugPrint('MQTT Message received on topic: $topic');
+    // debugPrint('Payload: $pt');
 
     try {
       final data = jsonDecode(pt);
@@ -139,14 +139,14 @@ class SignalingService extends BaseFuickService {
     // If we receive a message from ourselves, ignore it (shouldn't happen with correct topics but safety first)
     if (sourceId == _deviceId) return;
 
-    debugPrint('SignalingService: Received $type from $sourceId');
+    // debugPrint('SignalingService: Received $type from $sourceId');
 
     if (type == 'offer') {
       // Received Offer -> Set Remote -> Create Answer -> Send Answer
       _targetDeviceId = sourceId; // Lock on to this caller
 
       // Notify UI
-      debugPrint('SignalingService: Emitting received_offer to UI');
+      // debugPrint('SignalingService: Emitting received_offer to UI');
       controller?.getService<NativeEventService>()?.emit(
           'signaling_state', {'state': 'received_offer', 'sourceId': sourceId});
 
@@ -154,37 +154,36 @@ class SignalingService extends BaseFuickService {
 
       // FIX: Initialize PeerConnection as Callee (false)
       // This is required before we can handle any signals
-      debugPrint('SignalingService: Initializing WebRTC as Callee...');
+      // debugPrint('SignalingService: Initializing WebRTC as Callee...');
       await webRTC.startCall(false);
 
       // Ensure setSignalingCallback is set BEFORE calling handleSignal.
       webRTC.setSignalingCallback((signalData) {
-        debugPrint(
-            'SignalingService: Sending Answer/Candidate to $_targetDeviceId');
+        // debugPrint('SignalingService: Sending Answer/Candidate to $_targetDeviceId');
         _sendSignal(_targetDeviceId!, signalData['type'], signalData);
       });
 
       // handleSignal will: SetRemote(Offer) -> CreateAnswer -> SetLocal(Answer) -> _sendSignal(Answer)
-      debugPrint('SignalingService: Handling Offer...');
+      // debugPrint('SignalingService: Handling Offer...');
       await webRTC.handleSignal({'type': 'offer', 'sdp': data['sdp']});
     } else if (type == 'answer') {
       // Received Answer -> Set Remote
-      debugPrint('SignalingService: Handling Answer...');
+      // debugPrint('SignalingService: Handling Answer...');
       await WebRTCService()
           .handleSignal({'type': 'answer', 'sdp': data['sdp']});
     } else if (type == 'candidate') {
       // Received Candidate -> Add Candidate
-      debugPrint('SignalingService: Handling Candidate...');
+      // debugPrint('SignalingService: Handling Candidate...');
       await WebRTCService()
           .handleSignal({'type': 'candidate', 'candidate': data['candidate']});
     }
   }
 
   Future<bool> _startConnectionFlow(String targetId) async {
-    debugPrint('SignalingService: Starting connection flow to $targetId');
+    // debugPrint('SignalingService: Starting connection flow to $targetId');
     if (_client == null ||
         _client!.connectionStatus!.state != MqttConnectionState.connected) {
-      debugPrint('SignalingService: MQTT not connected, connecting now...');
+      // debugPrint('SignalingService: MQTT not connected, connecting now...');
       await _connect('controller');
     }
 
@@ -194,7 +193,7 @@ class SignalingService extends BaseFuickService {
 
     // Set callback to send Offer and Candidates
     webRTC.setSignalingCallback((data) {
-      debugPrint('SignalingService: Sending ${data['type']} to $targetId');
+      // debugPrint('SignalingService: Sending ${data['type']} to $targetId');
       _sendSignal(targetId, data['type'], data);
     });
 
