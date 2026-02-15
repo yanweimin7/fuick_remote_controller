@@ -39,6 +39,10 @@ dependencies:
   # 网络状态
   connectivity_plus: ^5.0.2
 
+  # WebRTC
+  flutter_webrtc: ^0.12.3
+  mqtt_client: ^10.11.9
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

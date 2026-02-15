@@ -6,6 +6,7 @@ import 'screens/mode_select_screen.dart';
 import 'services/control_service.dart';
 import 'services/network_discovery_service.dart';
 import 'services/screen_capture_service.dart';
+import 'services/webrtc_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +23,7 @@ void main() {
   ScreenCaptureService().register();
   ControlService().register();
   NetworkDiscoveryService().register();
+  WebRTCService().register();
 
   runApp(const RemoteControlApp());
 }

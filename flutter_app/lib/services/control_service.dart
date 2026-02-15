@@ -8,6 +8,7 @@ import 'package:fuickjs_flutter/core/service/base_fuick_service.dart';
 import 'package:fuickjs_flutter/core/service/native_event_service.dart';
 import 'package:fuickjs_flutter/core/service/native_services.dart';
 import 'package:fuickjs_flutter/core/utils/extensions.dart';
+import 'webrtc_service.dart';
 
 /// 控制服务 - 处理控制指令和点击事件
 class ControlService extends BaseFuickService {
@@ -18,31 +19,7 @@ class ControlService extends BaseFuickService {
 
   static const MethodChannel _channel = MethodChannel('accessibility_control');
 
-  ServerSocket? _serverSocket;
-  Socket? _serverClientSocket; // 被控端：连接进来的控制端 Socket
-  Socket? _clientSocket; // 控制端：连接到被控端的 Socket
-  bool _isServerRunning = false;
-  int _serverPort = 0;
-
   ControlService._internal() {
-    // 启动控制服务器（被控端使用）
-    registerAsyncMethod('startServer', (args) async {
-      final port = asIntOrNull(args['port']) ?? 0; // 0 表示自动分配端口
-      return await startServer(port);
-    });
-
-    // 停止控制服务器
-    registerAsyncMethod('stopServer', (args) async {
-      return await stopServer();
-    });
-
-    // 连接到被控端（控制端使用）
-    registerAsyncMethod('connect', (args) async {
-      final ip = args['ip'];
-      final port = asIntOrNull(args['port']) ?? 8080;
-      return await connectToControlee(ip, port);
-    });
-
     // 断开连接
     registerAsyncMethod('disconnect', (args) async {
       return await disconnect();
@@ -95,10 +72,7 @@ class ControlService extends BaseFuickService {
     });
 
     // 获取连接状态
-    registerMethod('isConnected', (args) => _clientSocket != null);
-
-    // 获取服务器状态
-    registerMethod('isServerRunning', (args) => _isServerRunning);
+    registerMethod('isConnected', (args) => WebRTCService().isDataChannelOpen);
 
     // 检查 Accessibility 服务是否启用
     registerAsyncMethod('isAccessibilityEnabled', (args) async {
@@ -112,16 +86,14 @@ class ControlService extends BaseFuickService {
       return true;
     });
 
-    // 获取服务器端口
-    registerMethod('getServerPort', (args) => _serverPort);
-
-    // 连接到中继服务器
-    registerAsyncMethod('connectRelay', (args) async {
-      final ip = args['ip'];
-      final port = asIntOrNull(args['port']) ?? 8888;
-      final deviceId = args['deviceId'];
-      final isHost = args['isHost'] == true;
-      return await connectRelay(ip, port, deviceId, isHost);
+    // 复制到剪贴板
+    registerAsyncMethod('copyToClipboard', (args) async {
+      final text = args['text'];
+      if (text != null) {
+        await Clipboard.setData(ClipboardData(text: text));
+        return true;
+      }
+      return false;
     });
   }
 
@@ -129,147 +101,61 @@ class ControlService extends BaseFuickService {
     NativeServiceManager().registerService(() => this);
   }
 
-  /// 启动控制服务器（被控端）
-  Future<Map<String, dynamic>> startServer(int port) async {
-    try {
-      if (_isServerRunning) {
-        return {'success': true, 'port': _serverPort};
-      }
-
-      // 检查 Accessibility 服务是否启用
-      final isEnabled = await _channel.invokeMethod('isAccessibilityEnabled');
-      if (isEnabled != true) {
-        // 引导用户开启 Accessibility 服务
-        await _channel.invokeMethod('openAccessibilitySettings');
-        return {'success': false, 'error': 'Accessibility service not enabled'};
-      }
-
-      _serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
-      _serverPort = _serverSocket!.port;
-      _isServerRunning = true;
-
-      // 监听控制端连接
-      _serverSocket!.listen(_onControlClientConnect);
-
-      // print('Control server started on port $_serverPort');
-      return {'success': true, 'port': _serverPort};
-    } catch (e) {
-      print('Start server error: $e');
-      return {'success': false, 'error': e.toString()};
-    }
-  }
-
   /// 停止控制服务器
   Future<bool> stopServer() async {
-    try {
-      await _serverSocket?.close();
-      _serverSocket = null;
-      _isServerRunning = false;
-      _serverPort = 0;
-      return true;
-    } catch (e) {
-      print('Stop server error: $e');
-      return false;
-    }
+    return true;
   }
 
-  /// 处理控制端连接
-  void _onControlClientConnect(Socket socket) {
-    // print('Control client connected: ${socket.remoteAddress}');
-    _serverClientSocket = socket;
+  /// 公共方法：处理控制指令 (From WebRTC)
+  Future<void> processCommand(Map<String, dynamic> command) async {
+    final action = command['action'];
+    final params = command['params'] ?? {};
 
-    // 监听控制指令
-    socket
-        .cast<List<int>>()
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen(
-          (message) {
-            if (message.trim().isNotEmpty) {
-              _onControlData(message);
-            }
-          },
-          onError: (e) => print('Control socket error: $e'),
-          onDone: () {
-            // print('Control client disconnected');
-            _serverClientSocket = null;
-            controller
-                ?.getService<NativeEventService>()
-                ?.emit('onClientConnected', {
-              'status': 'disconnected',
-            });
-          },
+    switch (action) {
+      case 'click':
+        await _injectClick(params['x'], params['y']);
+        break;
+      case 'swipe':
+        await _injectSwipe(
+          params['startX'],
+          params['startY'],
+          params['endX'],
+          params['endY'],
+          params['duration'],
         );
-
-    // 通知 JS 层有控制端连接
-    controller?.getService<NativeEventService>()?.emit('onClientConnected', {
-      'status': 'connected',
-      'client': {
-        'address': socket.remoteAddress.address,
-        'port': socket.remotePort,
-        'name': '远程控制端',
-      }
-    });
-  }
-
-  /// 处理控制数据
-  void _onControlData(String data) async {
-    try {
-      final command = jsonDecode(data);
-      final action = command['action'];
-      final params = command['params'] ?? {};
-
-      switch (action) {
-        case 'click':
-          // print(
-          //     'ControlService: Injecting click at ${params['x']}, ${params['y']}');
-          await _injectClick(params['x'], params['y']);
-          break;
-        case 'swipe':
-          // print('ControlService: Injecting swipe');
-          await _injectSwipe(
-            params['startX'],
-            params['startY'],
-            params['endX'],
-            params['endY'],
-            params['duration'],
-          );
-          break;
-        case 'longPress':
-          await _injectLongPress(params['x'], params['y'], params['duration']);
-          break;
-        case 'key':
-          await _injectKey(params['key']);
-          break;
-        case 'text':
-          await _injectText(params['text']);
-          break;
-      }
-
-      // 发送执行结果
-      _sendResponse({'action': action, 'success': true});
-    } catch (e) {
-      print('Process control command error: $e');
-      _sendResponse({'success': false, 'error': e.toString()});
+        break;
+      case 'longPress':
+        await _injectLongPress(params['x'], params['y'], params['duration']);
+        break;
+      case 'key':
+        await _injectKey(params['key']);
+        break;
+      case 'text':
+        await _injectText(params['text']);
+        break;
+      case 'webrtc_signal':
+        controller
+            ?.getService<NativeEventService>()
+            ?.emit('webrtc_remote_signal', params);
+        break;
     }
+
+    // 发送执行结果
+    _sendResponse({'action': action, 'success': true});
   }
 
   /// 发送响应给控制端
   void _sendResponse(Map<String, dynamic> response) {
-    _serverClientSocket?.write('${jsonEncode(response)}\n');
+    // Try WebRTC first
+    final webrtc = WebRTCService();
+    if (webrtc.isDataChannelOpen) {
+      webrtc.sendControlData(response);
+      return;
+    }
   }
-
-  int _frameCount = 0;
-  int _totalBytes = 0;
-  DateTime _lastLogTime = DateTime.now();
 
   /// 被控端：发送屏幕帧数据给控制端
   void sendScreenFrame(Map<String, dynamic> frameData) {
-    if (_serverClientSocket == null) {
-      print(
-          'ControlService: Warning - _serverClientSocket is null, cannot send frame');
-      return;
-    }
     try {
       final data = {
         'type': 'screen_frame',
@@ -277,19 +163,11 @@ class ControlService extends BaseFuickService {
       };
       final jsonStr = jsonEncode(data);
 
-      final bytes = utf8.encode('$jsonStr\n');
-      _serverClientSocket!.add(bytes);
-
-      _frameCount++;
-      _totalBytes += jsonStr.length;
-
-      final now = DateTime.now();
-      if (now.difference(_lastLogTime).inSeconds >= 1) {
-        // print(
-        //    'ControlService: Send FPS: $_frameCount, Rate: ${(_totalBytes / 1024).toStringAsFixed(1)} KB/s');
-        _frameCount = 0;
-        _totalBytes = 0;
-        _lastLogTime = now;
+      // 优先尝试 WebRTC 通道
+      final webrtc = WebRTCService();
+      if (webrtc.isDataChannelOpen) {
+        webrtc.sendData(jsonStr);
+        return;
       }
     } catch (e) {
       debugPrint('ControlService: Error sending screen frame: $e');
@@ -298,67 +176,10 @@ class ControlService extends BaseFuickService {
 
   // ==================== 控制端方法 ====================
 
-  /// 连接到被控端
-  Future<bool> connectToControlee(String ip, int port) async {
-    // print('Connecting to $ip:$port...');
-    try {
-      await disconnect();
-      // 增加超时时间到 10 秒
-      _clientSocket =
-          await Socket.connect(ip, port, timeout: Duration(seconds: 10));
-      // print('Connected to $ip:$port successfully');
-
-      // 监听被控端响应
-      _clientSocket!
-          .cast<List<int>>()
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen(
-        (message) {
-          if (message.trim().isNotEmpty) {
-            _onResponseData(message);
-          }
-        },
-        onError: (e) {
-          // print('Connection error: $e');
-          _clientSocket = null;
-          controller
-              ?.getService<NativeEventService>()
-              ?.emit('disconnected', {'error': e.toString()});
-        },
-        onDone: () {
-          // print('Disconnected from controlee');
-          _clientSocket = null;
-          controller
-              ?.getService<NativeEventService>()
-              ?.emit('disconnected', {});
-        },
-      );
-
-      controller
-          ?.getService<NativeEventService>()
-          ?.emit('connected', {'ip': ip, 'port': port});
-      return true;
-    } catch (e) {
-      print('Connect error: $e');
-      return false;
-    }
-  }
-
   /// 断开连接
   Future<bool> disconnect() async {
-    try {
-      await _clientSocket?.close();
-      _clientSocket = null;
-
-      // 如果作为被控端，也要断开当前的客户端连接
-      await _serverClientSocket?.close();
-      _serverClientSocket = null;
-
-      return true;
-    } catch (e) {
-      return false;
-    }
+    await WebRTCService().stopCall();
+    return true;
   }
 
   /// 发送点击事件
@@ -416,181 +237,36 @@ class ControlService extends BaseFuickService {
 
   /// 发送控制命令
   Future<bool> _sendCommand(Map<String, dynamic> command) async {
-    if (_clientSocket == null) return false;
-    try {
-      _clientSocket!.write('${jsonEncode(command)}\n');
-      return true;
-    } catch (e) {
-      print('Send command error: $e');
-      return false;
+    // 优先尝试 WebRTC
+    final webrtc = WebRTCService();
+    if (webrtc.isDataChannelOpen) {
+      return await webrtc.sendData(jsonEncode(command));
     }
-  }
 
-  int _receiveFrameCount = 0;
-  int _receiveTotalBytes = 0;
-  DateTime _receiveLastLogTime = DateTime.now();
+    return false;
+  }
 
   /// 处理响应数据
-  void _onResponseData(String data) {
-    try {
-      final response = jsonDecode(data);
-
-      // 检查是否是屏幕帧数据
-      if (response is Map && response['type'] == 'screen_frame') {
-        _receiveFrameCount++;
-        _receiveTotalBytes += data.length;
-
-        final now = DateTime.now();
-        if (now.difference(_receiveLastLogTime).inSeconds >= 1) {
-          // print(
-          //     'ControlService: Receive FPS: $_receiveFrameCount, Rate: ${(_receiveTotalBytes / 1024).toStringAsFixed(1)} KB/s');
-          _receiveFrameCount = 0;
-          _receiveTotalBytes = 0;
-          _receiveLastLogTime = now;
-        }
-
-        controller
-            ?.getService<NativeEventService>()
-            ?.emit('screen_frame', response['data']);
-        return;
-      }
-
-      // print('ControlService: Received data: $data');
-
+  void processResponse(Map<String, dynamic> response) {
+    // 检查是否是屏幕帧数据
+    if (response['type'] == 'screen_frame') {
       controller
           ?.getService<NativeEventService>()
-          ?.emit('command_response', response);
-    } catch (e) {
-      print('Parse response error: $e');
+          ?.emit('screen_frame', response['data']);
+      return;
     }
-  }
 
-  // ==================== 中继服务器方法 ====================
-
-  /// 连接到中继服务器
-  Future<Map<String, dynamic>> connectRelay(
-    String ip,
-    int port,
-    String deviceId,
-    bool isHost,
-  ) async {
-    try {
-      // 1. 断开之前的连接
-      await disconnect();
-
-      // 2. 连接到中继服务器
-      final socket =
-          await Socket.connect(ip, port, timeout: Duration(seconds: 10));
-
-      // 3. 发送注册/连接消息
-      if (isHost) {
-        socket.write(jsonEncode({'type': 'register', 'id': deviceId}) + '\n');
-      } else {
-        socket.write(
-            jsonEncode({'type': 'connect', 'targetId': deviceId}) + '\n');
-      }
-
-      final completer = Completer<Map<String, dynamic>>();
-
-      // 4. 监听握手响应
-      socket
-          .cast<List<int>>()
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen(
-        (message) {
-          if (message.trim().isEmpty) return;
-
-          bool handled = false;
-          try {
-            final data = jsonDecode(message);
-
-            // 处理握手消息
-            if (data['type'] == 'registered') {
-              if (isHost) {
-                if (!completer.isCompleted)
-                  completer.complete({'success': true});
-                handled = true;
-              }
-            } else if (data['type'] == 'connected') {
-              if (data['success'] == true) {
-                if (!completer.isCompleted)
-                  completer.complete({'success': true});
-
-                if (isHost) {
-                  _serverClientSocket = socket;
-                  controller?.getService<NativeEventService>()?.emit(
-                    'onClientConnected',
-                    {
-                      'status': 'connected',
-                      'client': {
-                        'address': 'Relay Server',
-                        'port': port,
-                        'name': '远程控制端 (Relay)',
-                      }
-                    },
-                  );
-                } else {
-                  _clientSocket = socket;
-                  controller?.getService<NativeEventService>()?.emit(
-                    'connected',
-                    {'ip': ip, 'port': port},
-                  );
-                }
-                handled = true;
-              } else {
-                if (!completer.isCompleted) {
-                  completer
-                      .complete({'success': false, 'error': data['error']});
-                }
-                socket.destroy();
-                return;
-              }
-            }
-          } catch (e) {
-            // ignore handshake errors
-          }
-
-          if (handled) return;
-
-          // 握手完成后，处理正常数据
-          if (isHost) {
-            // 被控端收到指令
-            _onControlData(message);
-          } else {
-            // 控制端收到响应
-            _onResponseData(message);
-          }
-        },
-        onError: (e) {
-          if (!completer.isCompleted) {
-            completer.complete({'success': false, 'error': e.toString()});
-          }
-          _handleRelayDisconnect(isHost, e.toString());
-        },
-        onDone: () {
-          _handleRelayDisconnect(isHost, null);
-        },
-      );
-
-      return completer.future;
-    } catch (e) {
-      return {'success': false, 'error': e.toString()};
+    // 检查是否是 WebRTC 信令
+    if (response['action'] == 'webrtc_signal') {
+      controller
+          ?.getService<NativeEventService>()
+          ?.emit('webrtc_remote_signal', response['params']);
+      return;
     }
-  }
 
-  void _handleRelayDisconnect(bool isHost, String? error) {
-    if (isHost) {
-      _serverClientSocket = null;
-      controller?.getService<NativeEventService>()?.emit('onClientConnected', {
-        'status': 'disconnected',
-      });
-    } else {
-      _clientSocket = null;
-      controller?.getService<NativeEventService>()?.emit('disconnected', {
-        if (error != null) 'error': error,
-      });
-    }
+    controller
+        ?.getService<NativeEventService>()
+        ?.emit('command_response', response);
   }
 
   // ==================== 被控端 - 事件注入 ====================
