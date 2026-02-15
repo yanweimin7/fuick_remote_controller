@@ -11,6 +11,7 @@ import {
   AppBar,
   useNavigator,
   Button,
+  TextField,
 } from "fuickjs";
 import { NetworkService } from "../services/network_service";
 import { ControlService } from "../services/control_service";
@@ -24,12 +25,20 @@ export default function ControleeHomePage() {
   const [isAnnouncing, setIsAnnouncing] = useState(false);
   const [connectedClient, setConnectedClient] = useState<any>(null);
 
+  const [relayIp, setRelayIp] = useState("192.168.3.26");
+  const [relayPort, setRelayPort] = useState("8812");
+  const [relayDeviceId, setRelayDeviceId] = useState("device_1");
+  const [isRelayConnected, setIsRelayConnected] = useState(false);
+
   useEffect(() => {
     loadDeviceInfo();
     return () => {
       // 清理
       if (isServerRunning) {
         stopServer();
+      }
+      if (isRelayConnected) {
+        ControlService.disconnect();
       }
     };
   }, []);
@@ -61,6 +70,35 @@ export default function ControleeHomePage() {
     await ControlService.stopServer();
     setIsServerRunning(false);
     setServerPort(0);
+  };
+
+  const connectRelay = async () => {
+    if (!relayIp || !relayPort || !relayDeviceId) {
+      alert("请输入完整的中继服务器信息");
+      return;
+    }
+
+    const port = parseInt(relayPort, 10);
+    const result = await ControlService.connectRelay(
+      relayIp,
+      port,
+      relayDeviceId,
+      true // isHost
+    );
+
+    if (result && result.success) {
+      setIsRelayConnected(true);
+      console.log("已连接到中继服务器，等待控制端连接...");
+    } else {
+      console.log("连接中继服务器失败: " + (result?.error || "未知错误"));
+      setIsRelayConnected(false);
+    }
+  };
+
+  const disconnectRelay = async () => {
+    await ControlService.disconnect();
+    setIsRelayConnected(false);
+    await ScreenCaptureService.stopCapture();
   };
 
   const toggleServer = () => {
@@ -162,6 +200,95 @@ export default function ControleeHomePage() {
                 </Column>
                 <Switch value={isServerRunning} onChanged={toggleServer} />
               </Row>
+            </Container>
+
+            {/* 中继服务卡片 */}
+            <Container
+              margin={{ top: 16 }}
+              padding={20}
+              decoration={{
+                color: "#FFFFFF",
+                borderRadius: 12,
+                boxShadow: {
+                  color: "#00000010",
+                  blurRadius: 8,
+                  offset: { dx: 0, dy: 2 },
+                },
+              }}
+            >
+              <Column>
+                <Row
+                  mainAxisAlignment="spaceBetween"
+                  crossAxisAlignment="center"
+                  margin={{ bottom: 16 }}
+                >
+                  <Column>
+                    <Text
+                      text="公网中继服务"
+                      fontSize={18}
+                      fontWeight="w500"
+                      color="#333333"
+                    />
+                    <Text
+                      text={
+                        isRelayConnected
+                          ? "已连接中继服务器"
+                          : "未连接"
+                      }
+                      fontSize={14}
+                      color={isRelayConnected ? "#4CAF50" : "#999999"}
+                      margin={{ top: 4 }}
+                    />
+                  </Column>
+                  <Switch
+                    value={isRelayConnected}
+                    onChanged={(val) => {
+                      if (val) connectRelay();
+                      else disconnectRelay();
+                    }}
+                  />
+                </Row>
+
+                {!isRelayConnected && (
+                  <Column>
+                    <TextField
+                      text={relayIp}
+                      hintText="中继服务器 IP"
+                      onChanged={setRelayIp}
+                      margin={{ bottom: 12 }}
+                    />
+                    <TextField
+                      text={relayPort}
+                      hintText="端口 (默认 8888)"
+                      onChanged={setRelayPort}
+                      margin={{ bottom: 12 }}
+                    />
+                    <TextField
+                      text={relayDeviceId}
+                      hintText="设备 ID (唯一标识)"
+                      onChanged={setRelayDeviceId}
+                      margin={{ bottom: 12 }}
+                    />
+                  </Column>
+                )}
+
+                {isRelayConnected && (
+                  <Container
+                    margin={{ top: 8 }}
+                    padding={12}
+                    decoration={{
+                      color: "#E3F2FD",
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Text
+                      text={`设备 ID: ${relayDeviceId}\n控制端连接时需输入此 ID`}
+                      fontSize={14}
+                      color="#1976D2"
+                    />
+                  </Container>
+                )}
+              </Column>
             </Container>
           </Container>
 

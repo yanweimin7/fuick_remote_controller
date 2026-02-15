@@ -24,6 +24,24 @@ export class ControlService {
     return result === true;
   }
 
+  static async connectRelay(
+    ip: string,
+    port: number,
+    deviceId: string,
+    isHost: boolean
+  ): Promise<{ success: boolean; error?: string }> {
+    const result = await (globalThis as any).dartCallNativeAsync(
+      "Control.connectRelay",
+      {
+        ip,
+        port,
+        deviceId,
+        isHost,
+      }
+    );
+    return result;
+  }
+
   static async isConnected(): Promise<boolean> {
     const result = await (globalThis as any).dartCallNative("Control.isConnected", {});
     return result === true;

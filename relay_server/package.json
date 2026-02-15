@@ -1,0 +1,10 @@
+{
+  "name": "relay-server",
+  "version": "1.0.0",
+  "description": "Simple relay server for remote control app",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {}
+}

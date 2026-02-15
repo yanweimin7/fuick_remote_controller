@@ -114,6 +114,15 @@ class ControlService extends BaseFuickService {
 
     // 获取服务器端口
     registerMethod('getServerPort', (args) => _serverPort);
+
+    // 连接到中继服务器
+    registerAsyncMethod('connectRelay', (args) async {
+      final ip = args['ip'];
+      final port = asIntOrNull(args['port']) ?? 8888;
+      final deviceId = args['deviceId'];
+      final isHost = args['isHost'] == true;
+      return await connectRelay(ip, port, deviceId, isHost);
+    });
   }
 
   void register() {
@@ -453,6 +462,134 @@ class ControlService extends BaseFuickService {
           ?.emit('command_response', response);
     } catch (e) {
       print('Parse response error: $e');
+    }
+  }
+
+  // ==================== 中继服务器方法 ====================
+
+  /// 连接到中继服务器
+  Future<Map<String, dynamic>> connectRelay(
+    String ip,
+    int port,
+    String deviceId,
+    bool isHost,
+  ) async {
+    try {
+      // 1. 断开之前的连接
+      await disconnect();
+
+      // 2. 连接到中继服务器
+      final socket =
+          await Socket.connect(ip, port, timeout: Duration(seconds: 10));
+
+      // 3. 发送注册/连接消息
+      if (isHost) {
+        socket.write(jsonEncode({'type': 'register', 'id': deviceId}) + '\n');
+      } else {
+        socket.write(
+            jsonEncode({'type': 'connect', 'targetId': deviceId}) + '\n');
+      }
+
+      final completer = Completer<Map<String, dynamic>>();
+
+      // 4. 监听握手响应
+      socket
+          .cast<List<int>>()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(
+        (message) {
+          if (message.trim().isEmpty) return;
+
+          bool handled = false;
+          try {
+            final data = jsonDecode(message);
+
+            // 处理握手消息
+            if (data['type'] == 'registered') {
+              if (isHost) {
+                if (!completer.isCompleted)
+                  completer.complete({'success': true});
+                handled = true;
+              }
+            } else if (data['type'] == 'connected') {
+              if (data['success'] == true) {
+                if (!completer.isCompleted)
+                  completer.complete({'success': true});
+
+                if (isHost) {
+                  _serverClientSocket = socket;
+                  controller?.getService<NativeEventService>()?.emit(
+                    'onClientConnected',
+                    {
+                      'status': 'connected',
+                      'client': {
+                        'address': 'Relay Server',
+                        'port': port,
+                        'name': '远程控制端 (Relay)',
+                      }
+                    },
+                  );
+                } else {
+                  _clientSocket = socket;
+                  controller?.getService<NativeEventService>()?.emit(
+                    'connected',
+                    {'ip': ip, 'port': port},
+                  );
+                }
+                handled = true;
+              } else {
+                if (!completer.isCompleted) {
+                  completer
+                      .complete({'success': false, 'error': data['error']});
+                }
+                socket.destroy();
+                return;
+              }
+            }
+          } catch (e) {
+            // ignore handshake errors
+          }
+
+          if (handled) return;
+
+          // 握手完成后，处理正常数据
+          if (isHost) {
+            // 被控端收到指令
+            _onControlData(message);
+          } else {
+            // 控制端收到响应
+            _onResponseData(message);
+          }
+        },
+        onError: (e) {
+          if (!completer.isCompleted) {
+            completer.complete({'success': false, 'error': e.toString()});
+          }
+          _handleRelayDisconnect(isHost, e.toString());
+        },
+        onDone: () {
+          _handleRelayDisconnect(isHost, null);
+        },
+      );
+
+      return completer.future;
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  void _handleRelayDisconnect(bool isHost, String? error) {
+    if (isHost) {
+      _serverClientSocket = null;
+      controller?.getService<NativeEventService>()?.emit('onClientConnected', {
+        'status': 'disconnected',
+      });
+    } else {
+      _clientSocket = null;
+      controller?.getService<NativeEventService>()?.emit('disconnected', {
+        if (error != null) 'error': error,
+      });
     }
   }
 

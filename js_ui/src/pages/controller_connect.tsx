@@ -15,6 +15,7 @@ import {
   Stack,
   Positioned,
   useNavigator,
+  Switch,
 } from "fuickjs";
 import { DeviceInfo } from "../types";
 import { NetworkService } from "../services/network_service";
@@ -32,17 +33,15 @@ export default function ControllerConnectPage(props: ControllerConnectPageProps)
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleConnect = async () => {
-    if (!ip || !port) {
-      setError("请输入 IP 地址和端口");
-      return;
-    }
+  // Relay mode states
+  const [useRelay, setUseRelay] = useState(false);
+  const [relayIp, setRelayIp] = useState("192.168.3.26");
+  const [relayPort, setRelayPort] = useState("8812");
+  const [targetDeviceId, setTargetDeviceId] = useState("device_1");
 
+  const handleConnect = async () => {
     setIsConnecting(true);
     setError(null);
-
-    const portNum = parseInt(port, 10);
-    // console.log(`[Controller] Connecting to ${ip}:${portNum}...`);
 
     // 设置一个前端超时保护，防止原生端卡死
     const timeoutPromise = new Promise<boolean>((resolve) => {
@@ -52,22 +51,49 @@ export default function ControllerConnectPage(props: ControllerConnectPageProps)
     });
 
     try {
-      const result = await Promise.race([
-        ControlService.connectToDevice(ip, portNum),
-        timeoutPromise
-      ]);
+      let result;
+      if (useRelay) {
+        if (!relayIp || !relayPort || !targetDeviceId) {
+          setError("请输入完整的中继服务器信息");
+          setIsConnecting(false);
+          return;
+        }
+        const portNum = parseInt(relayPort, 10);
+
+        result = await Promise.race([
+          ControlService.connectRelay(relayIp, portNum, targetDeviceId, false),
+          timeoutPromise
+        ]);
+      } else {
+        if (!ip || !port) {
+          setError("请输入 IP 地址和端口");
+          setIsConnecting(false);
+          return;
+        }
+        const portNum = parseInt(port, 10);
+        result = await Promise.race([
+          ControlService.connectToDevice(ip, portNum),
+          timeoutPromise
+        ]);
+      }
 
       setIsConnecting(false);
 
-      if (result) {
-        // console.log(`[Controller] Connected to ${ip}:${portNum} successfully`);
+      if (result && (result === true || (result as any).success)) {
         // 跳转到控制页面
         navigator.push("/controller/control", {
-          device: { name: device?.name || ip, ip, port: portNum },
+          device: {
+            name: useRelay ? `Relay: ${targetDeviceId}` : (device?.name || ip),
+            ip: useRelay ? relayIp : ip,
+            port: useRelay ? parseInt(relayPort) : parseInt(port)
+          },
         });
       } else {
-        // console.error(`[Controller] Failed to connect to ${ip}:${portNum}`);
-        setError("连接失败或超时，请确保：\n1. 两个设备在同一 Wi-Fi\n2. 被控端已开启服务\n3. 防火墙未拦截");
+        setError(
+          useRelay
+            ? ("连接中继失败: " + ((result as any)?.error || "未知错误"))
+            : "连接失败或超时，请确保：\n1. 两个设备在同一 Wi-Fi\n2. 被控端已开启服务\n3. 防火墙未拦截"
+        );
       }
     } catch (e) {
       // console.error(`[Controller] Connection error:`, e);
@@ -108,43 +134,111 @@ export default function ControllerConnectPage(props: ControllerConnectPageProps)
                 },
               }}
             >
-              <Text
-                text="输入被控设备信息"
-                fontSize={18}
-                fontWeight="w500"
-                color="#333333"
+              <Row
+                mainAxisAlignment="spaceBetween"
+                crossAxisAlignment="center"
                 margin={{ bottom: 24 }}
-              />
-
-              {/* IP 地址 */}
-              <Column margin={{ bottom: 16 }}>
+              >
                 <Text
-                  text="IP 地址"
-                  fontSize={14}
-                  color="#666666"
-                  margin={{ bottom: 8 }}
+                  text={useRelay ? "通过中继连接" : "局域网直连"}
+                  fontSize={18}
+                  fontWeight="w500"
+                  color="#333333"
                 />
-                <TextField
-                  text={ip}
-                  hintText="例如: 192.168.1.100"
-                  onChanged={(val: string) => setIp(val)}
-                />
-              </Column>
+                <Row crossAxisAlignment="center">
+                  <Text
+                    text="中继模式"
+                    fontSize={12}
+                    color="#666666"
+                    margin={{ right: 8 }}
+                  />
+                  <Switch
+                    value={useRelay}
+                    onChanged={setUseRelay}
+                  />
+                </Row>
+              </Row>
 
-              {/* 端口 */}
-              <Column margin={{ bottom: 24 }}>
-                <Text
-                  text="端口"
-                  fontSize={14}
-                  color="#666666"
-                  margin={{ bottom: 8 }}
-                />
-                <TextField
-                  text={port}
-                  hintText="例如: 8080"
-                  onChanged={(val: string) => setPort(val)}
-                />
-              </Column>
+              {!useRelay ? (
+                <>
+                  {/* IP 地址 */}
+                  <Column margin={{ bottom: 16 }}>
+                    <Text
+                      text="IP 地址"
+                      fontSize={14}
+                      color="#666666"
+                      margin={{ bottom: 8 }}
+                    />
+                    <TextField
+                      text={ip}
+                      hintText="例如: 192.168.1.100"
+                      onChanged={(val: string) => setIp(val)}
+                    />
+                  </Column>
+
+                  {/* 端口 */}
+                  <Column margin={{ bottom: 24 }}>
+                    <Text
+                      text="端口"
+                      fontSize={14}
+                      color="#666666"
+                      margin={{ bottom: 8 }}
+                    />
+                    <TextField
+                      text={port}
+                      hintText="例如: 8080"
+                      onChanged={(val: string) => setPort(val)}
+                    />
+                  </Column>
+                </>
+              ) : (
+                <>
+                  {/* 中继服务器 IP */}
+                  <Column margin={{ bottom: 16 }}>
+                    <Text
+                      text="中继服务器 IP"
+                      fontSize={14}
+                      color="#666666"
+                      margin={{ bottom: 8 }}
+                    />
+                    <TextField
+                      text={relayIp}
+                      hintText="例如: 1.2.3.4"
+                      onChanged={setRelayIp}
+                    />
+                  </Column>
+
+                  {/* 中继服务器端口 */}
+                  <Column margin={{ bottom: 16 }}>
+                    <Text
+                      text="中继服务器端口"
+                      fontSize={14}
+                      color="#666666"
+                      margin={{ bottom: 8 }}
+                    />
+                    <TextField
+                      text={relayPort}
+                      hintText="例如: 8888"
+                      onChanged={setRelayPort}
+                    />
+                  </Column>
+
+                  {/* 目标设备 ID */}
+                  <Column margin={{ bottom: 24 }}>
+                    <Text
+                      text="目标设备 ID"
+                      fontSize={14}
+                      color="#666666"
+                      margin={{ bottom: 8 }}
+                    />
+                    <TextField
+                      text={targetDeviceId}
+                      hintText="例如: device_1"
+                      onChanged={setTargetDeviceId}
+                    />
+                  </Column>
+                </>
+              )}
 
               {error && (
                 <Text
