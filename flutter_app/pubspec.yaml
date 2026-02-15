@@ -1,0 +1,50 @@
+name: remote_control_app
+description: 远程控制应用 - 使用 fuickjs 实现 UI
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # fuickjs 框架
+  fuickjs_flutter:
+    path: ../../fuickjs_framework/fuickjs_flutter
+  fjs_engine:
+    path: ../../fuickjs_core
+  
+  # 网络通信
+  web_socket_channel: ^3.0.1
+  
+  # 局域网发现
+  multicast_dns: ^0.3.2
+  
+  # 权限管理
+  permission_handler: ^11.0.1
+  
+  # 本地存储
+  shared_preferences: ^2.2.2
+  
+  # 图片处理
+  image: ^4.1.3
+  
+  # 设备信息
+  device_info_plus: ^9.1.0
+  
+  # 网络状态
+  connectivity_plus: ^5.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/js/
