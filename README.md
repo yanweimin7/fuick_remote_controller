@@ -1,103 +1,60 @@
-# AnyLink - Professional Remote Control Solution
+# AnyLink - 远程控制应用
 
-AnyLink is a powerful remote control application built with the **FuickJS** framework, enabling real-time screen sharing and remote control across devices on the same local network or via cloud signaling.
+AnyLink 是一个基于 Flutter 和 FuickJS 构建的专业远程控制解决方案，支持 Android 和 iOS 平台。
 
-## Key Features
+## 目录
+- [功能特性](#功能特性)
+- [使用流程](#使用流程)
+- [开发环境](#开发环境)
+- [注意事项](#注意事项)
 
-### 1. Seamless Connectivity
-- **Controller Mode**: Connect to and control remote devices with ease.
-- **Host Mode**: Share your screen and allow remote assistance.
-- **One-Click Connect**: Simple ID-based connection system.
+## 功能特性
+- **跨平台支持**：支持 Android 和 iOS 设备。
+- **多种连接模式**：
+  - **WebRTC 模式**：低延迟、高质量的音视频传输，适合实时控制。
+  - **手动模式 (Manual)**：基于截图传输，兼容性更好。
+- **一键连接**：通过设备 ID 快速建立连接。
+- **屏幕共享**：实时查看远程设备屏幕。
+- **远程控制**：支持点击、滑动等手势操作（需开启辅助功能权限）。
 
-### 2. High-Performance Screen Sharing
-- Real-time screen capture using Android MediaProjection API.
-- Optimized WebSocket data transmission for low latency.
-- Adaptive image quality and resolution.
+## 使用流程
 
-### 3. Full Remote Control
-- Touch, click, and swipe gestures.
-- Global navigation keys (Back, Home, Recents).
-- Requires Accessibility Service permissions on the host device.
+### 1. 启动应用
+打开 AnyLink 应用，进入主界面。
+- **Android**: 首次启动可能需要授予存储、相机、麦克风等权限。
+- **iOS**: 首次启动需授予网络和相机权限。
 
-### 4. Smart Discovery
-- Automatic local network device discovery.
-- Cloud signaling for reliable connections.
+### 2. 获取设备 ID
+在主界面上方，您可以看到“您的 ID”（Your ID）。
+- 将此 ID 分享给控制端用户，以便对方连接您的设备。
+- 点击 ID 旁边的复制图标可快速复制。
 
-## Project Structure
+### 3. 发起连接（控制端）
+在主界面下方的“控制远程设备”区域：
+1. **输入伙伴 ID**：在输入框中输入受控端的设备 ID。
+2. **选择模式**（可选）：点击下方的模式切换按钮，在 "WebRTC" 和 "手动" 之间切换。推荐使用 WebRTC 模式以获得更好的体验。
+3. **点击连接**：点击“连接”按钮发起请求。
 
-```
-remote_control_app/
-├── flutter_app/           # Native Flutter Container
-│   ├── lib/
-│   │   ├── main.dart
-│   │   ├── core/         # Core Configuration
-│   │   ├── screens/      # Screens
-│   │   └── services/     # Native Services
-│   └── android/          # Android Native Code
-│       └── app/src/main/kotlin/
-│           ├── ScreenCapturePlugin.kt
-│           ├── AccessibilityControlPlugin.kt
-│           └── RemoteControlAccessibilityService.kt
-│
-└── js_ui/                # FuickJS UI Project
-    ├── src/
-    │   ├── app.ts        # App Entry
-    │   ├── pages/        # UI Pages
-    │   │   ├── one_click_connect.tsx
-    │   │   ├── controller_control.tsx
-    │   └── services/     # Logic Services
-    └── dist/             # Compiled Output
-```
+### 4. 建立连接（受控端）
+- 受控端无需手动确认，连接建立后状态会自动更新为“远程控制已连接”。
+- **Android**: 连接成功后会自动开始屏幕截取。
+- **iOS**: 连接成功后，应用内画面将开始传输。注意 iOS 仅支持应用内录屏，切出应用后画面传输会暂停。
 
-## Tech Stack
+### 5. 远程控制操作
+连接建立后，控制端将进入控制页面：
+- **查看屏幕**：实时显示受控端画面。
+- **手势操作**：在屏幕上点击或滑动，指令将发送至受控端执行。
+- **退出控制**：点击左上角的返回按钮或底部的“停止共享”按钮断开连接。
 
-### Frontend (UI)
-- **FuickJS**: React-like framework for cross-platform UI.
-- **TypeScript**: Type-safe development.
+## 开发环境
+- **Flutter SDK**: >=3.0.0 <4.0.0
+- **FuickJS Framework**: 用于动态 UI 和逻辑处理。
+- **WebRTC**:用于实时音视频通信。
 
-### Native Backend
-- **Flutter**: Cross-platform engine.
-- **Kotlin**: Android native implementation.
-- **MediaProjection**: High-speed screen capture.
-- **AccessibilityService**: Precise gesture injection.
+## 注意事项
+- **Android 14+**: 需要特别授予媒体投影（Media Projection）权限。
+- **iOS 限制**: 由于系统隐私限制，iOS 目前仅支持应用内录屏（In-App Capture），不支持系统级屏幕共享（System Broadcast）。
+- **网络环境**: 建议在稳定的 Wi-Fi 环境下使用以获得最佳体验。P2P 连接需要双方网络可达，否则可能需要中继服务器（目前主要支持局域网或直连）。
 
-### Communication
-- **WebSocket**: Real-time data stream.
-- **UDP Broadcast / mDNS**: Device discovery.
-- **WebRTC**: Peer-to-peer streaming (optional).
-
-## Requirements
-
-- Android 7.0+ (API 24+)
-- Network connection (WiFi/LAN/Internet)
-- Accessibility Service enabled on the host device
-
-## Quick Start
-
-### 1. Setup
-
-```bash
-cd /Users/wey/work/flutter_dynamic/remote_control_app
-```
-
-### 2. Build UI
-
-```bash
-cd js_ui
-npm install
-npm run build
-```
-
-This compiles the TypeScript UI into a bundle for the Flutter engine.
-
-### 3. Run Application
-
-```bash
-cd flutter_app
-flutter pub get
-flutter run
-```
-
-## License
-
-Copyright © 2026 AnyLink Team. All rights reserved.
+---
+Powered by FuickJS & Flutter
