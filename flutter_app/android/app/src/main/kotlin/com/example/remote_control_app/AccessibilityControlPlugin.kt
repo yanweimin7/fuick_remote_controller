@@ -14,7 +14,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Accessibility 控制插件 - 用于注入点击、滑动等操作
+ * Accessibility Control Plugin - Used to inject clicks, swipes, etc.
  */
 class AccessibilityControlPlugin(private val context: Context) : MethodChannel.MethodCallHandler {
 
@@ -31,7 +31,7 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        // Log.d(TAG, "onMethodCall: ${call.method}") // 调试日志
+        // Log.d(TAG, "onMethodCall: ${call.method}") // Debug log
         when (call.method) {
             "isAccessibilityEnabled" -> result.success(isAccessibilityEnabled())
             "openAccessibilitySettings" -> openAccessibilitySettings(result)
@@ -45,10 +45,10 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
     }
 
     /**
-     * 检查 Accessibility 服务是否启用
+     * Check if Accessibility Service is enabled
      */
     private fun isAccessibilityEnabled(): Boolean {
-        // 简化检查逻辑，直接看 Service 实例是否存在
+        // Simplified check logic, directly check if Service instance exists
         val service = RemoteControlAccessibilityService.instance
         val isEnabled = service != null
         // Log.d(TAG, "isAccessibilityEnabled: $isEnabled (Service instance: $service)")
@@ -56,7 +56,7 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
     }
     
     /**
-     * 打开 Accessibility 设置页面
+     * Open Accessibility Settings Page
      */
     private fun openAccessibilitySettings(result: MethodChannel.Result) {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
@@ -66,7 +66,7 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
     }
 
     /**
-     * 注入点击操作
+     * Inject click operation
      */
     private fun injectClick(call: MethodCall, result: MethodChannel.Result) {
         val x = call.argument<Double>("x")?.toFloat() ?: 0f
@@ -87,7 +87,7 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
     }
 
     /**
-     * 注入滑动操作
+     * Inject swipe operation
      */
     private fun injectSwipe(call: MethodCall, result: MethodChannel.Result) {
         val startX = call.argument<Double>("startX")?.toFloat() ?: 0f
@@ -107,7 +107,7 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
     }
 
     /**
-     * 注入长按操作
+     * Inject long press operation
      */
     private fun injectLongPress(call: MethodCall, result: MethodChannel.Result) {
         val x = call.argument<Double>("x")?.toFloat() ?: 0f
@@ -125,7 +125,7 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
     }
 
     /**
-     * 注入按键操作
+     * Inject key operation
      */
     private fun injectKey(call: MethodCall, result: MethodChannel.Result) {
         val key = call.argument<String>("key") ?: ""
@@ -149,7 +149,7 @@ class AccessibilityControlPlugin(private val context: Context) : MethodChannel.M
     }
 
     /**
-     * 注入文本输入
+     * Inject text input
      */
     private fun injectText(call: MethodCall, result: MethodChannel.Result) {
         val text = call.argument<String>("text") ?: ""

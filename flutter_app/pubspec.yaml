@@ -1,5 +1,5 @@
 name: remote_control_app
-description: 远程控制应用 - 使用 fuickjs 实现 UI
+description: AnyLink - A professional remote control solution powered by FuickJS
 
 publish_to: 'none'
 
@@ -12,35 +12,36 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # fuickjs 框架
+  # FuickJS Framework
   fuickjs_flutter:
     path: ../../fuickjs_framework/fuickjs_flutter
   fjs_engine:
     path: ../../fuickjs_core
   
-  # 网络通信
+  # Network Communication
   web_socket_channel: ^3.0.1
   
-  # 局域网发现
+  # Local Network Discovery
   multicast_dns: ^0.3.2
   
-  # 权限管理
+  # Permission Management
   permission_handler: ^11.0.1
   
-  # 本地存储
+  # Local Storage
   shared_preferences: ^2.2.2
   
-  # 图片处理
+  # Image Processing
   image: ^4.1.3
   
-  # 设备信息
+  # Device Info
   device_info_plus: ^9.1.0
   
-  # 网络状态
+  # Network State
   connectivity_plus: ^5.0.2
 
   # WebRTC
-  flutter_webrtc: ^0.12.3
+  flutter_webrtc:
+    path: packages/flutter_webrtc
   mqtt_client: ^10.11.9
 
 dev_dependencies:

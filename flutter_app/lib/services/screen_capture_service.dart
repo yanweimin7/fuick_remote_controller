@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -9,11 +10,13 @@ import 'package:fuickjs_flutter/core/utils/extensions.dart';
 
 import 'control_service.dart';
 
-/// 屏幕捕获服务 - 用于被控端捕获屏幕并传输给控制端
+/// Screen Capture Service - Captures screen on the controlled device and transmits to controller
 class ScreenCaptureService extends BaseFuickService {
   static final ScreenCaptureService _instance =
       ScreenCaptureService._internal();
+
   factory ScreenCaptureService() => _instance;
+
   @override
   String get name => 'ScreenCapture';
 
@@ -22,14 +25,14 @@ class ScreenCaptureService extends BaseFuickService {
   StreamSubscription? _frameSubscription;
   bool _isCapturing = false;
 
-  // 图像质量设置
+  // Image quality settings
   int _quality = 80;
   int _maxWidth = 1280;
   int _maxHeight = 720;
   int _frameRate = 30;
 
   ScreenCaptureService._internal() {
-    // 开始屏幕捕获
+    // Start screen capture
     registerMethod('startCapture', (args) async {
       _quality = asIntOrNull(args['quality']) ?? 80;
       _maxWidth = asIntOrNull(args['maxWidth']) ?? 1280;
@@ -38,28 +41,28 @@ class ScreenCaptureService extends BaseFuickService {
       return await startCapture();
     });
 
-    // 停止屏幕捕获
+    // Stop screen capture
     registerMethod('stopCapture', (args) async {
       return await stopCapture();
     });
 
-    // 获取捕获状态
+    // Get capture status
     registerMethod('isCapturing', (args) => _isCapturing);
 
-    // 更新图像质量
+    // Update image quality
     registerMethod('setQuality', (args) {
       _quality = args['quality'] ?? 80;
       return _updateCaptureSettings();
     });
 
-    // 更新分辨率
+    // Update resolution
     registerMethod('setResolution', (args) {
       _maxWidth = args['maxWidth'] ?? 1280;
       _maxHeight = args['maxHeight'] ?? 720;
       return _updateCaptureSettings();
     });
 
-    // 更新帧率
+    // Update frame rate
     registerMethod('setFrameRate', (args) {
       _frameRate = args['frameRate'] ?? 30;
       return _updateCaptureSettings();
@@ -89,7 +92,7 @@ class ScreenCaptureService extends BaseFuickService {
     });
   }
 
-  /// 开始屏幕捕获
+  /// Start screen capture
   Future<bool> startCapture() async {
     // print('ScreenCapture: startCapture called');
     try {
@@ -98,12 +101,12 @@ class ScreenCaptureService extends BaseFuickService {
         return true;
       }
 
-      // 1. 先监听 EventChannel，确保不会错过第一帧
+      // 1. Listen to EventChannel first to ensure no missed frames
       _setupFrameListener();
 
-      // 2. 请求屏幕捕获权限（Android MediaProjection）
+      // 2. Request screen capture permission (Android MediaProjection)
       // print('ScreenCapture: Requesting permission...');
-      // 注意：这里可能会阻塞，直到用户授权
+      // Note: This may block until user grants permission
       final result = await _channel.invokeMethod('requestCapturePermission');
       // print('ScreenCapture: Permission result: $result');
       if (result != true) {
@@ -111,7 +114,7 @@ class ScreenCaptureService extends BaseFuickService {
         return false;
       }
 
-      // 3. 启动屏幕捕获
+      // 3. Start screen capture
       // print('ScreenCapture: Calling native startCapture...');
       await _channel.invokeMethod('startCapture', {
         'quality': _quality,
@@ -129,7 +132,7 @@ class ScreenCaptureService extends BaseFuickService {
     }
   }
 
-  /// 停止屏幕捕获
+  /// Stop screen capture
   Future<bool> stopCapture() async {
     try {
       await _frameSubscription?.cancel();
@@ -144,11 +147,11 @@ class ScreenCaptureService extends BaseFuickService {
 
   DateTime? _lastFrameTime;
 
-  /// 处理从原生层收到的帧数据
+  /// Handle frame data received from native layer
   void _onFrameData(Map data) {
     if (!_isCapturing) return;
 
-    // 恢复原始频率限制 (最高 25fps)
+    // Restore original frequency limit (max 25fps)
     final now = DateTime.now();
     if (_lastFrameTime != null &&
         now.difference(_lastFrameTime!).inMilliseconds < 40) {
@@ -156,7 +159,7 @@ class ScreenCaptureService extends BaseFuickService {
     }
     _lastFrameTime = now;
 
-    // 尝试获取物理分辨率作为 fallback
+    // Try to get physical resolution as fallback
     int? originalWidth = data['originalWidth'];
     int? originalHeight = data['originalHeight'];
 
@@ -184,7 +187,7 @@ class ScreenCaptureService extends BaseFuickService {
     ControlService().sendScreenFrame(frameData);
   }
 
-  /// 更新捕获设置
+  /// Update capture settings
   Future<bool> _updateCaptureSettings() async {
     try {
       await _channel.invokeMethod('updateSettings', {

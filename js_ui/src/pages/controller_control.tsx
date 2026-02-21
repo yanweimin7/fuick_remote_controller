@@ -46,7 +46,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
   const lastTime = useRef(Date.now());
 
   useEffect(() => {
-    // 监听屏幕帧数据
+    // Listen for screen frames
     const unsubscribe = ScreenCaptureService.onScreenFrame((frame: ScreenFrame) => {
       // Log received frame details
       if (frame.data) {
@@ -55,7 +55,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
         setScreenImage(cleanData);
       }
 
-      // 计算 FPS
+      // Calculate FPS
       frameCount.current++;
       const now = Date.now();
       if (now - lastTime.current >= 1000) {
@@ -64,7 +64,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
         lastTime.current = now;
       }
 
-      // 优化：仅当宽高变化时才更新 screenSize，避免不必要的重渲染
+      // Optimization: Update screenSize only when dimensions change to avoid unnecessary re-renders
       if (typeof frame.width === 'number' && typeof frame.height === 'number') {
         const newWidth = frame.width;
         const newHeight = frame.height;
@@ -87,7 +87,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
     // WebRTC setup
     // const unsubscribeWebRTC = WebRTCService.setup();
 
-    // 监听连接状态
+    // Listen for connection state
     const unsubscribeState = ControlService.onConnectionStateChange(
       (state, data) => {
         if (state === "connected") {
@@ -96,7 +96,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
             WebRTCService.startCall(true);
           }
         } else {
-          setError("连接已断开");
+          setError("Connection Lost");
           WebRTCService.stopCall();
         }
       }
@@ -111,7 +111,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
     };
   }, [device]);
 
-  // 处理触摸事件 - 将坐标映射到被控端屏幕
+  // Handle touch events - Map coordinates to the controlled device screen
   const handlePointerDown = (e: any) => {
     if (localSize.width && localSize.height && screenSize.width && screenSize.height) {
       // Calculate scale to fit (contain)
@@ -216,7 +216,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
       <Scaffold
         appBar={
           <AppBar
-            title={<Text text="连接出错" fontSize={20} fontWeight="bold" color="#FFFFFF" />}
+            title={<Text text="Connection Error" fontSize={20} fontWeight="bold" color="#FFFFFF" />}
             leading={
               <GestureDetector onTap={() => navigator.pop()}>
                 <Container padding={4}>
@@ -242,7 +242,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
               margin={{ top: 16 }}
             />
             <Button
-              text="返回"
+              text="Go Back"
               onTap={() => navigator.pop()}
               margin={{ top: 24 }}
             />
@@ -267,7 +267,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
       appBar={
         showControls ? (
           <AppBar
-            title={<Text text={device?.name || "远程控制"} fontSize={20} fontWeight="bold" color="#FFFFFF" />}
+            title={<Text text={device?.name || "AnyLink Remote"} fontSize={20} fontWeight="bold" color="#FFFFFF" />}
             leading={
               <GestureDetector onTap={() => navigator.pop()}>
                 <Container padding={4}>
@@ -275,7 +275,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
                 </Container>
               </GestureDetector>
             }
-            backgroundColor="#1976D2"
+            backgroundColor="#2563EB"
           />
         ) : undefined
       }
@@ -306,9 +306,9 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
                     </Stack>
                   ) : (
                     <Column mainAxisAlignment="center">
-                      <CircularProgressIndicator color="#1976D2" />
+                      <CircularProgressIndicator color="#2563EB" />
                       <Text
-                        text="等待画面..."
+                        text="Waiting for stream..."
                         fontSize={14}
                         color="#888888"
                         margin={{ top: 16 }}
@@ -321,11 +321,11 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
           </Container>
         </Positioned>
 
-        {/* 控制浮窗 */}
+        {/* Control floating window */}
         {showControls && (
           <Positioned bottom={40} left={20} right={20}>
             <Column>
-              {/* FPS 显示 */}
+              {/* FPS Display */}
               <Container
                 margin={{ bottom: 10 }}
                 padding={4}
@@ -365,7 +365,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
           </Positioned>
         )}
 
-        {/* 显示控制按钮 */}
+        {/* Show control button */}
         {!showControls && (
           <Positioned bottom={40} right={20}>
             <GestureDetector onTap={() => setShowControls(true)}>

@@ -13,7 +13,7 @@ import {
 import ControllerControlPage from "./pages/controller_control";
 import OneClickConnectPage from "./pages/one_click_connect";
 
-// 全局错误处理 UI
+// Global error handling UI
 const CustomErrorUI = (error: Error) =>
   React.createElement(CustomErrorComponent, { error });
 
@@ -30,7 +30,7 @@ const CustomErrorComponent = ({ error }: { error: Error }) => {
         padding: 30,
       },
       React.createElement(Text, {
-        text: "出错了",
+        text: "Error Occurred",
         fontSize: 22,
         color: "#C62828",
         fontWeight: "bold",
@@ -48,7 +48,7 @@ const CustomErrorComponent = ({ error }: { error: Error }) => {
           margin: { bottom: 20 },
         },
         React.createElement(Text, {
-          text: error?.message || "未知错误",
+          text: error?.message || "Unknown Error",
           fontSize: 14,
           color: "#D32F2F",
           maxLines: 5,
@@ -56,7 +56,7 @@ const CustomErrorComponent = ({ error }: { error: Error }) => {
         })
       ),
       React.createElement(Button, {
-        text: "返回首页",
+        text: "Back to Home",
         onTap: () => navigator.push("/"),
       })
     )
@@ -68,10 +68,10 @@ export function initApp() {
     Runtime.bindGlobals();
     setGlobalErrorFallback(CustomErrorUI);
 
-    // 首页直接显示 One Click 连接页面
+    // Home page directly displays One Click Connect page
     Router.register("/", (args) => React.createElement(OneClickConnectPage, args as any));
 
-    // 控制页面
+    // Control page
     Router.register("/controller/control", (args) =>
       React.createElement(ControllerControlPage, args as any)
     );

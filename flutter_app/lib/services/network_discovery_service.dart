@@ -5,7 +5,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:fuickjs_flutter/core/service/base_fuick_service.dart';
 import 'package:fuickjs_flutter/core/service/native_services.dart';
 
-/// 网络发现服务 - 简化版：仅获取本地信息
+/// Network Discovery Service - Simplified: Get local info only
 class NetworkDiscoveryService extends BaseFuickService {
   static final NetworkDiscoveryService _instance =
       NetworkDiscoveryService._internal();
@@ -14,12 +14,12 @@ class NetworkDiscoveryService extends BaseFuickService {
   String get name => 'NetworkDiscovery';
 
   NetworkDiscoveryService._internal() {
-    // 获取本机信息
+    // Get local device info
     registerMethod('getDeviceInfo', (args) async {
       return await _getDeviceInfo();
     });
 
-    // 获取本机 IP 地址
+    // Get local IP address
     registerMethod('getLocalIp', (args) async {
       return await _getLocalIp();
     });
@@ -29,7 +29,7 @@ class NetworkDiscoveryService extends BaseFuickService {
     NativeServiceManager().registerService(() => this);
   }
 
-  /// 获取本机 IP 地址
+  /// Get local IP address
   Future<String?> _getLocalIp() async {
     try {
       // print('NetworkDiscovery: Listing network interfaces...');
@@ -41,7 +41,7 @@ class NetworkDiscoveryService extends BaseFuickService {
           if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
             // print('NetworkDiscovery:   - ${addr.address} (${addr.type.name})');
 
-            // 优先选择 wlan0 (Android WiFi) 或 en0 (iOS WiFi) 或 eth0 (Ethernet)
+            // Prioritize wlan0 (Android WiFi), en0 (iOS WiFi), or eth0 (Ethernet)
             if (interface.name.startsWith('wlan') ||
                 interface.name.startsWith('en') ||
                 interface.name.startsWith('eth')) {
@@ -63,7 +63,7 @@ class NetworkDiscoveryService extends BaseFuickService {
     return null;
   }
 
-  /// 获取设备信息
+  /// Get device info
   Future<Map<String, dynamic>> _getDeviceInfo() async {
     final deviceInfo = DeviceInfoPlugin();
     String name;

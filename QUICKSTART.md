@@ -1,57 +1,57 @@
-# 快速开始指南
+# Quick Start Guide
 
-## 环境准备
+## Prerequisites
 
-### 必需环境
+### Required Environment
 - Flutter SDK 3.0+
 - Dart SDK 3.0+
 - Node.js 16+
 - Android SDK (API 24+)
-- 两部 Android 手机（7.0+）
+- Two Android phones (7.0+)
 
-### 检查环境
+### Check Environment
 ```bash
-# 检查 Flutter
+# Check Flutter
 flutter doctor
 
-# 检查 Node.js
+# Check Node.js
 node --version
 npm --version
 ```
 
-## 项目结构
+## Project Structure
 
 ```
 remote_control_app/
-├── flutter_app/      # Flutter 原生应用
-├── js_ui/            # fuickjs UI 代码
-└── build.sh          # 构建脚本
+├── flutter_app/      # Flutter native app
+├── js_ui/            # FuickJS UI code
+└── build.sh          # Build script
 ```
 
-## 构建步骤
+## Build Steps
 
-### 方法一：使用构建脚本（推荐）
+### Method 1: Use Build Script (Recommended)
 
 ```bash
 cd /Users/wey/work/flutter_dynamic/remote_control_app
 ./build.sh
 ```
 
-### 方法二：手动构建
+### Method 2: Manual Build
 
-#### 1. 构建 JS UI
+#### 1. Build JS UI
 
 ```bash
 cd js_ui
 npm install
 npm run build
 
-# 复制 bundle 到 Flutter
+# Copy bundle to Flutter
 mkdir -p ../flutter_app/assets/js
 cp dist/bundle.js ../flutter_app/assets/js/
 ```
 
-#### 2. 构建 Flutter 应用
+#### 2. Build Flutter App
 
 ```bash
 cd ../flutter_app
@@ -59,112 +59,112 @@ flutter pub get
 flutter build apk --release
 ```
 
-## 安装和运行
+## Install and Run
 
-### 安装 APK
+### Install APK
 
 ```bash
 cd flutter_app
 flutter install
 ```
 
-或者手动安装：
+Or install manually:
 ```bash
 adb install build/app/outputs/flutter-apk/app-release.apk
 ```
 
-### 运行应用
+### Run App
 
-1. **在被控手机上**：
-   - 打开应用
-   - 选择「被控端」
-   - 点击「开启屏幕共享服务」
-   - 授权屏幕捕获权限
-   - 前往设置开启 Accessibility 服务
+1. **On Controlled Phone (Controlee)**:
+   - Open App
+   - Select "Controlee" (if applicable) or wait on Home Screen
+   - Click "Start Screen Sharing" (if applicable)
+   - Grant Screen Capture permission
+   - Go to Settings and enable Accessibility Service
 
-2. **在控制手机上**：
-   - 打开应用
-   - 选择「控制端」
-   - 等待发现设备或手动输入 IP
-   - 点击连接
+2. **On Controlling Phone (Controller)**:
+   - Open App
+   - Select "Controller" (if applicable)
+   - Enter Partner ID
+   - Click Connect
 
-## 调试
+## Debugging
 
-### 查看日志
+### View Logs
 ```bash
 flutter logs
 ```
 
-### 热重载（开发时）
+### Hot Reload (During Development)
 ```bash
 cd flutter_app
 flutter run
 ```
 
-### JS 调试
-在 `js_ui` 目录下：
+### JS Debugging
+In `js_ui` directory:
 ```bash
-npm run watch  # 监听文件变化自动编译
+npm run watch  # Watch for file changes and auto-compile
 ```
 
-## 常见问题
+## FAQ
 
-### Q: 无法发现设备？
-- 确保两台手机在同一 WiFi 下
-- 检查防火墙设置
-- 尝试手动输入 IP 连接
+### Q: Cannot discover device?
+- Ensure both phones are on the same WiFi (for local discovery)
+- Check firewall settings
+- Try manual IP connection
 
-### Q: 屏幕捕获权限被拒绝？
-- 重新启动应用
-- 检查是否有其他应用正在使用屏幕录制
+### Q: Screen capture permission denied?
+- Restart the app
+- Check if other apps are using screen recording
 
-### Q: 点击无效？
-- 确保被控端已开启 Accessibility 服务
-- 重新开启服务试试
+### Q: Clicks not working?
+- Ensure Accessibility Service is enabled on the controlled device
+- Try restarting the service
 
-### Q: 画面卡顿？
-- 降低图像质量（设置中调整）
-- 降低分辨率
-- 降低帧率
+### Q: Laggy video?
+- Lower image quality (in settings)
+- Lower resolution
+- Lower frame rate
 
-## 开发提示
+## Development Tips
 
-### 添加新页面
+### Add New Page
 
-1. 在 `js_ui/src/pages/` 创建新页面
-2. 在 `js_ui/src/app.ts` 注册路由
-3. 重新构建 JS bundle
+1. Create new page in `js_ui/src/pages/`
+2. Register route in `js_ui/src/app.ts`
+3. Rebuild JS bundle
 
-### 添加原生功能
+### Add Native Functionality
 
-1. 在 `flutter_app/lib/services/` 创建服务类
-2. 继承 `BaseFuickService`
-3. 在 `main.dart` 中注册服务
-4. JS 层通过 `dartCallNative` 调用
+1. Create service class in `flutter_app/lib/services/`
+2. Extend `BaseFuickService`
+3. Register service in `main.dart`
+4. Call from JS layer via `dartCallNative`
 
-### 修改 Android 原生代码
+### Modify Android Native Code
 
-修改后需要重新构建：
+After modification, need to rebuild:
 ```bash
 cd flutter_app
 flutter clean
 flutter build apk
 ```
 
-## 项目依赖关系
+## Project Dependencies
 
 ```
 js_ui (TypeScript/React-like)
-    ↓ 编译为
+    ↓ Compiles to
 flutter_app/assets/js/bundle.js
-    ↓ 被加载
+    ↓ Loaded by
 flutter_app (Flutter/Dart)
-    ↓ 调用 Android 原生 API
+    ↓ Calls Android Native API
 Android Native (Kotlin)
 ```
 
-## 下一步
+## Next Steps
 
-- [ ] 阅读 `README.md` 了解更多功能
-- [ ] 查看 `flutter_app/lib/services/` 了解原生服务
-- [ ] 查看 `js_ui/src/pages/` 了解 UI 实现
+- [ ] Read `README.md` for more features
+- [ ] Check `flutter_app/lib/services/` to understand native services
+- [ ] Check `js_ui/src/pages/` to understand UI implementation

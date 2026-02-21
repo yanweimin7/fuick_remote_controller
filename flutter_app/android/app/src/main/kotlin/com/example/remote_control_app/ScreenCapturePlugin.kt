@@ -30,7 +30,7 @@ import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 
 /**
- * 屏幕捕获插件 - 使用 MediaProjection API 捕获屏幕
+ * Screen Capture Plugin - Use MediaProjection API to capture screen
  */
 class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandler, EventChannel.StreamHandler,
     PluginRegistry.ActivityResultListener {
@@ -59,7 +59,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
     private var methodChannel: MethodChannel? = null
     private var eventChannel: EventChannel? = null
 
-    // FlutterPlugin 接口实现
+    // FlutterPlugin interface implementation
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         // android.util.Log.d("ScreenCapture", "onAttachedToEngine")
         val messenger = binding.binaryMessenger
@@ -81,7 +81,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
         eventChannel = null
     }
 
-    // ActivityAware 接口实现
+    // ActivityAware interface implementation
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         // android.util.Log.d("ScreenCapture", "onAttachedToActivity")
         activity = binding.activity
@@ -134,7 +134,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
     }
 
     /**
-     * 请求屏幕捕获权限
+     * Request screen capture permission
      */
     private fun requestCapturePermission(result: MethodChannel.Result) {
         val activity = this.activity ?: run {
@@ -144,8 +144,8 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
 
         pendingResult = result
 
-        // Android 14+ 要求: 不能在获得投影权限之前启动 mediaProjection 类型的 Service
-        // 所以这里我们只请求权限，Service 的启动移到 onActivityResult 中
+        // Android 14+ Requirement: Cannot start mediaProjection type Service before obtaining projection permission
+        // So here we only request permission, Service startup is moved to onActivityResult
         
         mediaProjectionManager = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
             as MediaProjectionManager
@@ -155,12 +155,12 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
     }
 
     /**
-     * 开始屏幕捕获
+     * Start screen capture
      */
     private fun startCapture(call: MethodCall, result: MethodChannel.Result) {
         // android.util.Log.d("ScreenCapture", "startCapture called, isCapturing=$isCapturing")
         
-        // 强制重置帧处理状态，防止上次异常导致的死锁
+        // Force reset frame processing state to prevent deadlock caused by previous exceptions
         isProcessingFrame.set(false)
         
         if (isCapturing) {
@@ -175,19 +175,19 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
             return
         }
 
-        // 检查 MediaProjection 是否已准备就绪
+        // Check if MediaProjection is ready
         if (mediaProjection == null) {
             // android.util.Log.d("ScreenCapture", "MediaProjection is null, requesting permission first...")
-            // 如果 MediaProjection 未就绪，应该先请求权限，而不是直接报错
-            // 但根据目前的逻辑，startCapture 应该在权限请求后调用
-            // 这里我们尝试再次请求权限
+            // If MediaProjection is not ready, should request permission first instead of erroring out directly
+            // But based on current logic, startCapture should be called after permission request
+            // Here we try to request permission again
             requestCapturePermission(result)
             return
         }
 
         val projection = mediaProjection!!
         
-        // 启动前台服务 (Android 10+ 必须)
+        // Start Foreground Service (Mandatory for Android 10+)
         val serviceIntent = Intent(activity, ScreenCaptureService::class.java)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             activity.startForegroundService(serviceIntent)
@@ -195,7 +195,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
             activity.startService(serviceIntent)
         }
 
-        // 获取屏幕分辨率
+        // Get Screen Resolution
         val displayMetrics = DisplayMetrics()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             activity.display?.getRealMetrics(displayMetrics)
@@ -211,22 +211,22 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
             screenHeight = 1280
         }
 
-        // 初始化 Handler 和 Executor
+        // Initialize Handler and Executor
         handler = Handler(Looper.getMainLooper())
         executor = Executors.newSingleThreadExecutor()
 
-        // 恢复原始分辨率和质量
+        // Restore original resolution and quality
         val scale = 0.25f 
-        // 确保宽高为偶数，避免某些设备编码器不支持奇数
+        // Ensure width and height are even, to avoid encoder issues on some devices
         captureWidth = ((screenWidth * scale).toInt() / 2) * 2
         captureHeight = ((screenHeight * scale).toInt() / 2) * 2
-        captureQuality = 15 // 降低默认质量
+        captureQuality = call.argument<Int>("quality") ?: captureQuality
  
 
         // android.util.Log.d("ScreenCapture", "Capture settings: ${captureWidth}x${captureHeight}, quality=$captureQuality")
 
-        // 创建 ImageReader
-        // 注意：maxImages 至少为 2，为了更流畅，我们可以设为 3
+        // Create ImageReader
+        // Note: maxImages must be at least 2, set to 3 for smoother performance
         imageReader = ImageReader.newInstance(
             captureWidth, captureHeight,
             PixelFormat.RGBA_8888, 3
@@ -234,14 +234,14 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
 
         isCapturing = true
 
-        // 设置 ImageAvailableListener
+        // Set ImageAvailableListener
         imageReader?.setOnImageAvailableListener({ reader ->
             if (!isCapturing) return@setOnImageAvailableListener
             
-            // 快速丢弃策略：如果处理线程忙，直接丢弃当前帧，防止 Buffer 积压
+            // Fast drop policy: If processing thread is busy, drop current frame to prevent Buffer backlog
             if (isProcessingFrame.get()) {
                 try {
-                    // 必须 acquire 再 close 才能释放 buffer
+                    // Must acquire then close to release buffer
                     val image = reader.acquireLatestImage()
                     image?.close()
                 } catch (e: Exception) {
@@ -264,7 +264,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
         }
         projection.registerCallback(mediaProjectionCallback!!, handler)
 
-        // 创建 VirtualDisplay
+        // Create VirtualDisplay
         try {
             virtualDisplay = projection.createVirtualDisplay(
                 "ScreenCapture",
@@ -282,16 +282,16 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
     }
 
     /**
-     * 开始帧捕获循环 (已移除，改用 ImageAvailableListener 驱动)
+     * Start frame capture loop (Removed, driven by ImageAvailableListener)
      */
     private fun startFrameCapture() {
-        // 不再需要
+        // No longer needed
     }
 
     private var isProcessingFrame = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /**
-     * 捕获单帧
+     * Capture single frame
      */
     private fun captureFrame() {
         if (isProcessingFrame.get()) {
@@ -300,7 +300,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
         
         var image: Image? = null
         try {
-            // 记录开始时间
+            // Record start time
             val startTime = System.currentTimeMillis()
 
             image = imageReader?.acquireLatestImage()
@@ -321,10 +321,10 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
             val pixelStride = plane.pixelStride
             val rowStride = plane.rowStride
             
-            // 计算 padding
+            // Calculate padding
             val rowPadding = rowStride - pixelStride * captureWidth
 
-            // 1. 创建原始 Bitmap (包含 padding)
+            // 1. Create original Bitmap (including padding)
             val width = captureWidth + rowPadding / pixelStride
             val bitmap = Bitmap.createBitmap(
                 width,
@@ -333,18 +333,18 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
             )
             bitmap.copyPixelsFromBuffer(buffer)
 
-            // 2. 裁剪掉 padding (如果需要)
+            // 2. Crop padding (if needed)
             var finalBitmap = bitmap
             if (rowPadding > 0) {
                 finalBitmap = Bitmap.createBitmap(bitmap, 0, 0, captureWidth, captureHeight)
             }
 
-            // 3. 压缩为 JPEG
+            // 3. Compress to JPEG
             val outputStream = ByteArrayOutputStream()
             finalBitmap.compress(Bitmap.CompressFormat.JPEG, captureQuality, outputStream)
             val jpegData = outputStream.toByteArray()
 
-            // 释放 Bitmap 资源
+            // Release Bitmap resources
             if (finalBitmap !== bitmap) {
                 finalBitmap.recycle()
             }
@@ -354,8 +354,8 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
             
             android.util.Log.d("ScreenCapture", "Frame generated: ${jpegData.size} bytes, time: ${processTime}ms")
 
-            // 发送数据给 Flutter 端
-            // 必须切换到主线程发送 EventChannel 消息
+            // Send data to Flutter side
+            // Must switch to main thread to send EventChannel message
             activity?.runOnUiThread {
                 try {
                     android.util.Log.d("ScreenCapture", "Sending frame to Flutter via EventChannel")
@@ -389,7 +389,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
     }
 
     /**
-     * 停止屏幕捕获
+     * Stop screen capture
      */
     private fun stopCapture(result: MethodChannel.Result?) {
         isCapturing = false
@@ -419,7 +419,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
         executor?.shutdown()
         executor = null
 
-        // 停止前台服务
+        // Stop foreground service
         activity?.let {
             val serviceIntent = Intent(it, ScreenCaptureService::class.java)
             it.stopService(serviceIntent)
@@ -429,23 +429,23 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
     }
 
     /**
-     * 更新捕获设置
+     * Update capture settings
      */
     private fun updateSettings(call: MethodCall, result: MethodChannel.Result) {
         captureQuality = call.argument<Int>("quality") ?: captureQuality
         frameRate = call.argument<Int>("frameRate") ?: frameRate
-        // 分辨率更新需要重新启动捕获
+        // Resolution update requires restarting capture
         result.success(true)
     }
 
     /**
-     * 处理 Activity 结果
+     * Handle Activity Result
      */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
         if (requestCode != REQUEST_CODE) return false
 
         if (resultCode == Activity.RESULT_OK && data != null) {
-            // Android 14+: 必须在获取 MediaProjection 之前启动 Foreground Service (且类型为 mediaProjection)
+            // Android 14+: Must start Foreground Service (and type as mediaProjection) before obtaining MediaProjection
             activity?.let {
                 val serviceIntent = Intent(it, ScreenCaptureService::class.java)
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -455,7 +455,7 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
                 }
             }
 
-            // 延迟获取 MediaProjection，确保 Service.startForeground 已执行
+            // Delay obtaining MediaProjection to ensure Service.startForeground has executed
             Handler(Looper.getMainLooper()).postDelayed({
                 try {
                     mediaProjection = mediaProjectionManager?.getMediaProjection(resultCode, data)
@@ -468,11 +468,11 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
                 }
             }, 500)
             
-            // 返回 true，表示已处理，但在 postDelayed 中才真正完成
+            // Return true, indicating handled, but truly completed in postDelayed
             return true
         } else {
             android.util.Log.w("ScreenCapture", "Permission denied or data is null")
-            // 用户拒绝了权限，停止之前启动的前台服务
+            // User denied permission, stop the previously started foreground service
             activity?.let {
                 val serviceIntent = Intent(it, ScreenCaptureService::class.java)
                 it.stopService(serviceIntent)

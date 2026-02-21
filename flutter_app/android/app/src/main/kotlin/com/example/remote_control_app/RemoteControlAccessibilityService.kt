@@ -10,8 +10,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.InputConnection
 
 /**
- * 远程控制 Accessibility 服务
- * 用于接收并执行远程控制指令（点击、滑动等）
+ * Remote Control Accessibility Service
+ * Used to receive and execute remote control commands (click, swipe, etc.)
  */
 class RemoteControlAccessibilityService : AccessibilityService() {
 
@@ -27,7 +27,7 @@ class RemoteControlAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // 不需要处理事件
+        // No event handling needed
     }
 
     override fun onInterrupt() {
@@ -41,7 +41,7 @@ class RemoteControlAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * 执行点击操作
+     * Perform click operation
      */
     fun performClick(x: Float, y: Float): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
@@ -60,7 +60,7 @@ class RemoteControlAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * 执行滑动操作
+     * Perform swipe operation
      */
     fun performSwipe(
         startX: Float,
@@ -92,7 +92,7 @@ class RemoteControlAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * 执行长按操作
+     * Perform long press operation
      */
     fun performLongPress(x: Float, y: Float, duration: Int): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
@@ -103,7 +103,7 @@ class RemoteControlAccessibilityService : AccessibilityService() {
         val path = Path()
         path.moveTo(x, y)
 
-        // 使用 willContinue 参数创建可延续的手势
+        // Use willContinue parameter to create a continuable gesture
         val stroke = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             GestureDescription.StrokeDescription(path, 0, duration.toLong(), true)
         } else {
@@ -118,7 +118,7 @@ class RemoteControlAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * 输入文本
+     * Input text
      */
     fun inputText(text: String): Boolean {
         val rootNode = rootInActiveWindow ?: return false

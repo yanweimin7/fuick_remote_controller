@@ -9,7 +9,7 @@ import 'package:fuickjs_flutter/core/service/native_services.dart';
 import 'package:fuickjs_flutter/core/utils/extensions.dart';
 import 'webrtc_service.dart';
 
-/// 控制服务 - 处理控制指令和点击事件
+/// Control Service - Handles control commands and click events
 class ControlService extends BaseFuickService {
   static final ControlService _instance = ControlService._internal();
   factory ControlService() => _instance;
@@ -19,19 +19,19 @@ class ControlService extends BaseFuickService {
   static const MethodChannel _channel = MethodChannel('accessibility_control');
 
   ControlService._internal() {
-    // 断开连接
+    // Disconnect
     registerAsyncMethod('disconnect', (args) async {
       return await disconnect();
     });
 
-    // 发送点击事件（控制端调用）
+    // Send click event (Called by controller)
     registerAsyncMethod('sendClick', (args) async {
       final x = args['x'];
       final y = args['y'];
       return await sendClick(x, y);
     });
 
-    // 发送滑动事件（控制端调用）
+    // Send swipe event (Called by controller)
     registerAsyncMethod('sendSwipe', (args) async {
       final startX = args['startX'];
       final startY = args['startY'];
@@ -41,7 +41,7 @@ class ControlService extends BaseFuickService {
       return await sendSwipe(startX, startY, endX, endY, duration);
     });
 
-    // 发送长按事件（控制端调用）
+    // Send long press event (Called by controller)
     registerAsyncMethod('sendLongPress', (args) async {
       final x = args['x'];
       final y = args['y'];
@@ -49,43 +49,43 @@ class ControlService extends BaseFuickService {
       return await sendLongPress(x, y, duration);
     });
 
-    // 发送返回键
+    // Send Back key
     registerAsyncMethod('sendBack', (args) async {
       return await sendKey('back');
     });
 
-    // 发送 Home 键
+    // Send Home key
     registerAsyncMethod('sendHome', (args) async {
       return await sendKey('home');
     });
 
-    // 发送最近任务键
+    // Send Recent Apps key
     registerAsyncMethod('sendRecent', (args) async {
       return await sendKey('recent');
     });
 
-    // 发送文本输入
+    // Send Text Input
     registerAsyncMethod('sendText', (args) async {
       final text = args['text'];
       return await sendText(text);
     });
 
-    // 获取连接状态
+    // Get Connection Status
     registerMethod('isConnected', (args) => WebRTCService().isDataChannelOpen);
 
-    // 检查 Accessibility 服务是否启用
+    // Check if Accessibility Service is enabled
     registerAsyncMethod('isAccessibilityEnabled', (args) async {
       final isEnabled = await _channel.invokeMethod('isAccessibilityEnabled');
       return isEnabled == true;
     });
 
-    // 打开 Accessibility 设置
+    // Open Accessibility Settings
     registerAsyncMethod('openAccessibilitySettings', (args) async {
       await _channel.invokeMethod('openAccessibilitySettings');
       return true;
     });
 
-    // 复制到剪贴板
+    // Copy to Clipboard
     registerAsyncMethod('copyToClipboard', (args) async {
       final text = args['text'];
       if (text != null) {
@@ -100,12 +100,12 @@ class ControlService extends BaseFuickService {
     NativeServiceManager().registerService(() => this);
   }
 
-  /// 停止控制服务器
+  /// Stop control server
   Future<bool> stopServer() async {
     return true;
   }
 
-  /// 公共方法：处理控制指令 (From WebRTC)
+  /// Public Method: Process control command (From WebRTC)
   Future<void> processCommand(Map<String, dynamic> command) async {
     final action = command['action'];
     final params = command['params'] ?? {};
@@ -139,11 +139,11 @@ class ControlService extends BaseFuickService {
         break;
     }
 
-    // 发送执行结果
+    // Send execution result
     _sendResponse({'action': action, 'success': true});
   }
 
-  /// 发送响应给控制端
+  /// Send response to controller
   void _sendResponse(Map<String, dynamic> response) {
     // Try WebRTC first
     final webrtc = WebRTCService();
@@ -153,7 +153,7 @@ class ControlService extends BaseFuickService {
     }
   }
 
-  /// 被控端：发送屏幕帧数据给控制端
+  /// Controlled Side: Send screen frame data to controller
   void sendScreenFrame(Map<String, dynamic> frameData) {
     try {
       // final dataContent = frameData['data'];
@@ -172,7 +172,7 @@ class ControlService extends BaseFuickService {
       };
       final jsonStr = jsonEncode(data);
 
-      // 优先尝试 WebRTC 通道
+      // Try WebRTC Channel first
       final webrtc = WebRTCService();
       if (webrtc.isDataChannelOpen) {
         webrtc.sendData(jsonStr);
@@ -185,24 +185,23 @@ class ControlService extends BaseFuickService {
     }
   }
 
-  // ==================== 控制端方法 ====================
+  // ==================== Controller Methods ====================
 
-  /// 断开连接
+  /// Disconnect
   Future<bool> disconnect() async {
     await WebRTCService().stopCall();
     return true;
   }
 
-  /// 发送点击事件
+  /// Send Click Event
   Future<bool> sendClick(double x, double y) async {
-    // print('wine send commne ');
     return _sendCommand({
       'action': 'click',
       'params': {'x': x, 'y': y}
     });
   }
 
-  /// 发送滑动事件
+  /// Send Swipe Event
   Future<bool> sendSwipe(
     double startX,
     double startY,
@@ -222,7 +221,7 @@ class ControlService extends BaseFuickService {
     });
   }
 
-  /// 发送长按事件
+  /// Send Long Press Event
   Future<bool> sendLongPress(double x, double y, int duration) async {
     return _sendCommand({
       'action': 'longPress',
@@ -230,7 +229,7 @@ class ControlService extends BaseFuickService {
     });
   }
 
-  /// 发送按键事件
+  /// Send Key Event
   Future<bool> sendKey(String key) async {
     return _sendCommand({
       'action': 'key',
@@ -238,7 +237,7 @@ class ControlService extends BaseFuickService {
     });
   }
 
-  /// 发送文本
+  /// Send Text
   Future<bool> sendText(String text) async {
     return _sendCommand({
       'action': 'text',
@@ -246,9 +245,9 @@ class ControlService extends BaseFuickService {
     });
   }
 
-  /// 发送控制命令
+  /// Send Control Command
   Future<bool> _sendCommand(Map<String, dynamic> command) async {
-    // 优先尝试 WebRTC
+    // Try WebRTC first
     final webrtc = WebRTCService();
     if (webrtc.isDataChannelOpen) {
       return await webrtc.sendData(jsonEncode(command));
@@ -257,9 +256,9 @@ class ControlService extends BaseFuickService {
     return false;
   }
 
-  /// 处理响应数据
+  /// Process Response Data
   void processResponse(Map<String, dynamic> response) {
-    // 检查是否是屏幕帧数据
+    // Check if it is screen frame data
     if (response['type'] == 'screen_frame') {
       // final frameData = response['data'] as Map;
       // final dataContent = frameData['data'];
@@ -278,7 +277,7 @@ class ControlService extends BaseFuickService {
       return;
     }
 
-    // 检查是否是 WebRTC 信令
+    // Check if it is WebRTC signal
     if (response['action'] == 'webrtc_signal') {
       controller
           ?.getService<NativeEventService>()
@@ -291,7 +290,7 @@ class ControlService extends BaseFuickService {
         ?.emit('command_response', response);
   }
 
-  // ==================== 被控端 - 事件注入 ====================
+  // ==================== Controlled Side - Event Injection ====================
 
   Future<void> _injectClick(double x, double y) async {
     await _channel.invokeMethod('injectClick', {'x': x, 'y': y});

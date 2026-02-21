@@ -1,7 +1,7 @@
 import { initApp } from "./app";
 
-// 将 initApp 挂载到全局，方便 Flutter 主动调用
+// Mount initApp to global scope for Flutter to call proactively
 (globalThis as any).initApp = initApp;
 
-// 同时尝试立即初始化
+// Also attempt to initialize immediately
 initApp();

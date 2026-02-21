@@ -12,15 +12,15 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // 注册屏幕捕获插件
+        // Register Screen Capture Plugin
         flutterEngine.plugins.add(ScreenCapturePlugin())
         
-        // 注册 Accessibility 控制插件
+        // Register Accessibility Control Plugin
         AccessibilityControlPlugin.registerWith(flutterEngine, this)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        // 插件已自动绑定 ActivityResultListener
+        // Plugin is automatically bound to ActivityResultListener
     }
 }

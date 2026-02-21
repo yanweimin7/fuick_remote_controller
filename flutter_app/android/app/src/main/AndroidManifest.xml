@@ -1,24 +1,24 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.remote_control_app">
 
-    <!-- 网络权限 -->
+    <!-- Network Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     
-    <!-- 局域网发现权限 -->
+    <!-- Local Network Discovery Permissions -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     
-    <!-- 屏幕捕获权限 -->
+    <!-- Screen Capture Permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     
-    <!-- 存储权限（用于调试） -->
+    <!-- Storage Permissions (For Debugging) -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <application
-        android:label="远程控制"
+        android:label="AnyLink"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true"
@@ -43,7 +43,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Accessibility 服务 -->
+        <!-- Accessibility Service -->
         <service
             android:name=".RemoteControlAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -56,7 +56,7 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!-- 屏幕捕获服务 -->
+        <!-- Screen Capture Service -->
         <service
             android:name=".ScreenCaptureService"
             android:foregroundServiceType="mediaProjection"

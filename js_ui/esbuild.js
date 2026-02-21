@@ -74,13 +74,13 @@ async function build() {
     await esbuild.build({
       ...commonOptions,
       entryPoints: ['src/index.ts'],
-      outfile: 'dist/remote_controller.js',
+      outfile: 'dist/anylink_controller.js',
       plugins: [globalsPlugin],
     });
 
     const bundles = [
       { name: 'framework.bundle', src: 'dist/framework.bundle.js' },
-      { name: 'remote_controller', src: 'dist/remote_controller.js' },
+      { name: 'anylink_controller', src: 'dist/anylink_controller.js' },
     ];
 
     for (const b of bundles) {

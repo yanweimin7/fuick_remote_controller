@@ -1,16 +1,16 @@
-/// 应用运行模式
+/// App running mode
 enum AppMode {
-  /// 未选择
+  /// Not selected
   none,
   
-  /// 控制端 - 控制其他设备
+  /// Controller - Control other devices
   controller,
   
-  /// 被控端 - 被其他设备控制
+  /// Controlee - Controlled by other devices
   controlee,
 }
 
-/// 全局应用状态管理
+/// Global app state management
 class AppState {
   static final AppState _instance = AppState._internal();
   factory AppState() => _instance;
@@ -20,11 +20,11 @@ class AppState {
   String? deviceId;
   String? deviceName;
   
-  // 被控端信息
+  // Controlee info
   String? controleeIp;
   int? controleePort;
   
-  // 控制端信息
+  // Controller info
   String? controllerIp;
   int? controllerPort;
 }

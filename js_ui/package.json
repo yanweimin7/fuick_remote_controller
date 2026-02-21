@@ -1,7 +1,7 @@
 {
-  "name": "remote-control-ui",
+  "name": "anylink-ui",
   "version": "1.0.0",
-  "description": "远程控制应用 UI - 使用 fuickjs 框架",
+  "description": "AnyLink UI - Powered by FuickJS",
   "main": "dist/index.js",
   "scripts": {
     "build": "node esbuild.js",

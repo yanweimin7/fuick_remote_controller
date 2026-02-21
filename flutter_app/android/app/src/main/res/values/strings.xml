@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">远程控制</string>
+    <string name="app_name">AnyLink</string>
     <string name="accessibility_service_description">
-        远程控制 Accessibility 服务，用于接收远程控制指令并执行点击、滑动等操作。
-        启用此服务后，您可以通过其他设备远程控制此手机。
+        AnyLink Accessibility Service. Used to receive remote control commands such as clicks and swipes.
+        Enable this service to allow remote control of this device.
     </string>
 </resources>

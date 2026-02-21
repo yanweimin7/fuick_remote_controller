@@ -14,13 +14,28 @@ import {
   CircularProgressIndicator,
   Row,
   Icon,
+  Image,
 } from "fuickjs";
 import { NetworkService } from "../services/network_service";
 import { StorageService } from "../services/storage_service";
 import { ControlService } from "../services/control_service";
 import { ScreenCaptureService } from "../services/screen_capture_service";
 
-export default function OneClickConnectPage() {
+// Define a nice color palette
+const Colors = {
+  primary: "#2563EB", // Royal Blue
+  primaryDark: "#1E40AF",
+  secondary: "#64748B", // Slate
+  background: "#F8FAFC", // Light Gray/Blue
+  surface: "#FFFFFF",
+  textPrimary: "#1E293B",
+  textSecondary: "#64748B",
+  success: "#10B981",
+  error: "#EF4444",
+  divider: "#E2E8F0",
+};
+
+export default function AnyLinkHomePage() {
   const navigator = useNavigator();
   const [targetId, setTargetId] = useState("");
   const [myId, setMyId] = useState("Loading...");
@@ -37,7 +52,6 @@ export default function OneClickConnectPage() {
 
     // Listen for incoming connections (Acting as Controlee)
     const removeClientListener = ControlService.onClientConnected(async (data) => {
-      // console.log("OneClick: Client connection event:", data);
       if (data.status === "connected") {
         setRemoteConnected(true);
         setStatus("Remote Controller Connected");
@@ -60,8 +74,6 @@ export default function OneClickConnectPage() {
       } else if (data.status === "disconnected") {
         setRemoteConnected(false);
         setStatus("Ready to Connect");
-        // Capture should stop automatically or we can force it
-        // ScreenCaptureService.stopCapture(); // If method exists
       }
     });
 
@@ -109,7 +121,6 @@ export default function OneClickConnectPage() {
 
       if (success) {
         // Navigate to Control Page immediately
-        // The Control Page will handle the actual connection establishment and loading state
         navigator.push("/controller/control", {
           device: {
             ip: "P2P",
@@ -138,84 +149,118 @@ export default function OneClickConnectPage() {
 
   return (
     <Scaffold
-      backgroundColor="#F5F5F5"
+      backgroundColor={Colors.background}
       appBar={
         <AppBar
-          title="Remote Control"
+          title="AnyLink"
           centerTitle={true}
-          backgroundColor="#1976D2"
+          backgroundColor={Colors.primary}
           elevation={0}
+          actions={[
+            <GestureDetector onTap={() => { console.log("Settings tapped"); }}>
+              {/* <Container padding={16}>
+                <Icon name="settings" size={24} color="#FFFFFF" />
+              </Container> */}
+            </GestureDetector>
+          ]}
         />
       }
     >
       <Stack fit="expand">
         <Column padding={20} crossAxisAlignment="stretch">
-          {/* My Device ID Section */}
           <Container
-            padding={20}
+            padding={24}
             decoration={{
-              color: "#FFFFFF",
-              borderRadius: 12,
+              color: Colors.surface,
+              borderRadius: 16,
               boxShadow: {
-                color: "#0000001A",
-                offset: { dx: 0, dy: 2 },
-                blurRadius: 4,
+                color: "#0000000D", // Very light shadow
+                offset: { dx: 0, dy: 4 },
+                blurRadius: 12,
               },
             }}
             margin={{ bottom: 24 }}
           >
-            <Text
-              text="My Device ID"
-              fontSize={14}
-              color="#757575"
-              margin={{ bottom: 8 }}
-            />
             <Row mainAxisAlignment="spaceBetween" crossAxisAlignment="center">
-              <Text
-                text={myId}
-                fontSize={28}
-                fontWeight="bold"
-                color="#1976D2"
-              />
+              <Column crossAxisAlignment="start">
+                <Text
+                  text="Your ID"
+                  fontSize={14}
+                  fontWeight="bold"
+                  color={Colors.textSecondary}
+                  margin={{ bottom: 4 }}
+                />
+                <Text
+                  text={myId}
+                  fontSize={32}
+                  fontWeight="900" // Extra bold
+                  color={Colors.textPrimary}
+                  letterSpacing={1.2}
+                />
+              </Column>
+
               <GestureDetector onTap={() => ControlService.copyToClipboard(myId)}>
-                <Icon name="content_copy" size={24} color="#757575" />
+                <Container
+                  padding={12}
+                  decoration={{
+                    color: "#F1F5F9",
+                    borderRadius: 12,
+                  }}
+                >
+                  <Icon name="content_copy" size={24} color={Colors.primary} />
+                </Container>
               </GestureDetector>
             </Row>
-            <Text
-              text="Share this ID to allow remote control"
-              fontSize={12}
-              color="#9E9E9E"
-              margin={{ top: 8 }}
-            />
+
+            <Container
+              margin={{ top: 16 }}
+              padding={{ vertical: 8, horizontal: 12 }}
+              decoration={{
+                color: "#EFF6FF",
+                borderRadius: 8,
+              }}
+            >
+              <Row>
+                <Icon name="info_outline" size={16} color={Colors.primary} />
+                <SizedBox width={8} />
+                <Text
+                  text="Share this ID to allow remote access."
+                  fontSize={12}
+                  color={Colors.primaryDark}
+                />
+              </Row>
+            </Container>
           </Container>
 
           {/* Connect to Remote Section */}
           <Container
-            padding={20}
+            padding={24}
             decoration={{
-              color: "#FFFFFF",
-              borderRadius: 12,
+              color: Colors.surface,
+              borderRadius: 16,
               boxShadow: {
-                color: "#0000001A",
-                offset: { dx: 0, dy: 2 },
-                blurRadius: 4,
+                color: "#0000000D",
+                offset: { dx: 0, dy: 4 },
+                blurRadius: 12,
               },
             }}
           >
             <Text
               text="Control Remote Device"
-              fontSize={16}
+              fontSize={18}
               fontWeight="bold"
-              color="#212121"
-              margin={{ bottom: 16 }}
+              color={Colors.textPrimary}
+              margin={{ bottom: 20 }}
             />
 
             <Container
               decoration={{
-                color: "#F5F5F5",
-                borderRadius: 8,
+                color: "#F1F5F9",
+                borderRadius: 12,
+                border: { width: 1, color: Colors.divider }
               }}
               padding={{ horizontal: 16, vertical: 4 }}
+              margin={{ bottom: 20 }}
             >
               <TextField
                 text={targetId}
@@ -223,26 +268,35 @@ export default function OneClickConnectPage() {
                 onChanged={setTargetId}
                 keyboardType="number"
                 maxLines={1}
+                style={{ fontSize: 18, color: Colors.textPrimary }}
               />
             </Container>
 
-            <SizedBox height={20} />
             <GestureDetector onTap={isConnecting ? () => { } : handleConnect}>
               <Container
-                height={50}
+                height={56}
                 decoration={{
-                  color: isConnecting ? "#B0BEC5" : "#1976D2",
-                  borderRadius: 8,
+                  color: isConnecting ? Colors.secondary : Colors.primary,
+                  borderRadius: 12,
+                  boxShadow: {
+                    color: isConnecting ? "transparent" : "#2563EB4D",
+                    offset: { dx: 0, dy: 4 },
+                    blurRadius: 8,
+                  }
                 }}
                 alignment="center"
               >
                 {isConnecting ? (
-                  <CircularProgressIndicator color="#FFFFFF" />
+                  <Row mainAxisAlignment="center">
+                    <CircularProgressIndicator color="#FFFFFF" size={20} />
+                    <SizedBox width={12} />
+                    <Text text="Connecting..." color="#FFFFFF" fontSize={16} fontWeight="bold" />
+                  </Row>
                 ) : (
                   <Text
                     text="Connect"
                     color="#FFFFFF"
-                    fontSize={16}
+                    fontSize={18}
                     fontWeight="bold"
                   />
                 )}
@@ -250,47 +304,83 @@ export default function OneClickConnectPage() {
             </GestureDetector>
           </Container>
 
-          <SizedBox height={20} />
-          <Container alignment="center">
-            <Text text={status} color="#757575" fontSize={14} />
+          {/* Status Bar */}
+          <Container alignment="center" margin={{ top: 32 }}>
+            <Row mainAxisAlignment="center">
+              <Container
+                width={8}
+                height={8}
+                decoration={{
+                  color: status.includes("Ready") ? Colors.success : (status.includes("Error") ? Colors.error : Colors.secondary),
+                  borderRadius: 4
+                }}
+                margin={{ right: 8 }}
+              />
+              <Text text={status} color={Colors.textSecondary} fontSize={14} />
+            </Row>
           </Container>
+
+          {/* Footer Version */}
+          <Container alignment="center" margin={{ top: 20 }}>
+            <Text text="v1.0.0" color="#CBD5E1" fontSize={12} />
+          </Container>
+
         </Column>
 
         {/* Remote Control Overlay - When we are being controlled */}
         {remoteConnected && (
           <Positioned left={0} right={0} top={0} bottom={0}>
-            <Container color="#000000CC" alignment="center" padding={30}>
+            <Container color="#0F172ACC" alignment="center" padding={30}>
               <Column mainAxisAlignment="center" crossAxisAlignment="center">
-                <Icon name="screen_share" size={64} color="#FFFFFF" />
-                <SizedBox height={24} />
+                <Container
+                  padding={24}
+                  decoration={{
+                    color: "#FFFFFF20",
+                    borderRadius: 100,
+                  }}
+                  margin={{ bottom: 32 }}
+                >
+                  <Icon name="screen_share" size={64} color="#FFFFFF" />
+                </Container>
+
                 <Text
                   text="Screen Sharing Active"
                   color="#FFFFFF"
                   fontSize={24}
                   fontWeight="bold"
+                  margin={{ bottom: 12 }}
                 />
-                <SizedBox height={8} />
+
                 <Text
                   text="This device is being controlled remotely"
-                  color="#B0BEC5"
+                  color="#94A3B8"
                   fontSize={16}
+                  margin={{ bottom: 48 }}
                 />
-                <SizedBox height={48} />
+
                 <GestureDetector onTap={handleStopSharing}>
                   <Container
                     padding={{ horizontal: 32, vertical: 16 }}
                     decoration={{
-                      color: "#D32F2F",
+                      color: Colors.error,
                       borderRadius: 30,
-                      border: { width: 2, color: "#FFFFFF" }
+                      boxShadow: {
+                        color: "#EF444466",
+                        offset: { dx: 0, dy: 4 },
+                        blurRadius: 12,
+                      }
                     }}
                   >
-                    <Text
-                      text="Stop Sharing"
-                      color="#FFFFFF"
-                      fontSize={18}
-                      fontWeight="bold"
-                    />
+                    <Row>
+                      <Icon name="stop_circle" size={24} color="#FFFFFF" />
+                      <SizedBox width={12} />
+                      <Text
+                        text="Stop Sharing"
+                        color="#FFFFFF"
+                        fontSize={18}
+                        fontWeight="bold"
+                      />
+                    </Row>
                   </Container>
                 </GestureDetector>
               </Column>
