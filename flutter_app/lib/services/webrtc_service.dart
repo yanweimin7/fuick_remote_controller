@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -151,8 +152,10 @@ class WebRTCService extends BaseFuickService {
     // If WebRTC mode and Controlled (Callee), start capture and add track
     if (!isCaller && captureMode == 'webrtc') {
       // Start foreground service first to comply with Android 14+ MediaProjection requirements
-      final serviceStarted =
-          await ScreenCaptureService().startForegroundService();
+      bool serviceStarted = true;
+      if (Platform.isAndroid) {
+        serviceStarted = await ScreenCaptureService().startForegroundService();
+      }
 
       if (!serviceStarted) {
         debugPrint(
@@ -161,7 +164,9 @@ class WebRTCService extends BaseFuickService {
       }
 
       // Short delay to ensure service is fully registered
-      await Future.delayed(const Duration(milliseconds: 500));
+      if (Platform.isAndroid) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
 
       await startCapture();
       if (_localStream != null) {
