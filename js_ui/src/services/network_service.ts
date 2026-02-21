@@ -27,8 +27,8 @@ export class NetworkService {
     return await (globalThis as any).dartCallNativeAsync("Signaling.getDeviceId", {});
   }
 
-  static async connectToDevice(targetId: string): Promise<boolean> {
-    return await (globalThis as any).dartCallNativeAsync("Signaling.connectToDevice", { targetId });
+  static async connectToDevice(targetId: string, captureMode: string): Promise<boolean> {
+    return await (globalThis as any).dartCallNativeAsync("Signaling.connectToDevice", { targetId, captureMode });
   }
 
   static async disconnectSignaling(): Promise<boolean> {
