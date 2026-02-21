@@ -215,15 +215,24 @@ class ScreenCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
         handler = Handler(Looper.getMainLooper())
         executor = Executors.newSingleThreadExecutor()
 
-        // Restore original resolution and quality
-        val scale = 0.25f 
+        // Get parameters
+        val maxWidth = call.argument<Int>("maxWidth") ?: 1280
+        val maxHeight = call.argument<Int>("maxHeight") ?: 720
+        captureQuality = call.argument<Int>("quality") ?: 80
+
+        // Calculate scale to fit within max dimensions while maintaining aspect ratio
+        var scale = 1.0f
+        if (screenWidth > maxWidth || screenHeight > maxHeight) {
+            val wScale = maxWidth.toFloat() / screenWidth
+            val hScale = maxHeight.toFloat() / screenHeight
+            scale = if (wScale < hScale) wScale else hScale
+        }
+        
         // Ensure width and height are even, to avoid encoder issues on some devices
         captureWidth = ((screenWidth * scale).toInt() / 2) * 2
         captureHeight = ((screenHeight * scale).toInt() / 2) * 2
-        captureQuality = call.argument<Int>("quality") ?: captureQuality
- 
 
-        // android.util.Log.d("ScreenCapture", "Capture settings: ${captureWidth}x${captureHeight}, quality=$captureQuality")
+        android.util.Log.d("ScreenCapture", "Capture settings: ${captureWidth}x${captureHeight}, quality=$captureQuality, scale=$scale")
 
         // Create ImageReader
         // Note: maxImages must be at least 2, set to 3 for smoother performance

@@ -7,11 +7,11 @@ export class ScreenCaptureService {
     maxWidth?: number;
     maxHeight?: number;
     frameRate?: number;
-  }): Promise<boolean> {
+  } = {}): Promise<boolean> {
     const result = await (globalThis as any).dartCallNativeAsync("ScreenCapture.startCapture", {
-      quality: 80,
-      maxWidth: 1280,
-      maxHeight: 720,
+      quality: 90,
+      maxWidth: 1920,
+      maxHeight: 1080,
       frameRate: 30,
       ...params,
     });

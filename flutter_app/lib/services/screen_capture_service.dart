@@ -26,17 +26,17 @@ class ScreenCaptureService extends BaseFuickService {
   bool _isCapturing = false;
 
   // Image quality settings
-  int _quality = 80;
-  int _maxWidth = 1280;
-  int _maxHeight = 720;
+  int _quality = 90;
+  int _maxWidth = 1920;
+  int _maxHeight = 1920; // Allow 1920 height for portrait mode
   int _frameRate = 30;
 
   ScreenCaptureService._internal() {
     // Start screen capture
     registerMethod('startCapture', (args) async {
-      _quality = asIntOrNull(args['quality']) ?? 80;
-      _maxWidth = asIntOrNull(args['maxWidth']) ?? 1280;
-      _maxHeight = asIntOrNull(args['maxHeight']) ?? 720;
+      _quality = asIntOrNull(args['quality']) ?? 90;
+      _maxWidth = asIntOrNull(args['maxWidth']) ?? 1920;
+      _maxHeight = asIntOrNull(args['maxHeight']) ?? 1920;
       _frameRate = asIntOrNull(args['frameRate']) ?? 30;
       return await startCapture();
     });
@@ -51,22 +51,18 @@ class ScreenCaptureService extends BaseFuickService {
 
     // Update image quality
     registerMethod('setQuality', (args) {
-      _quality = args['quality'] ?? 80;
+      _quality = args['quality'] ?? 90;
       return _updateCaptureSettings();
     });
 
     // Update resolution
     registerMethod('setResolution', (args) {
-      _maxWidth = args['maxWidth'] ?? 1280;
-      _maxHeight = args['maxHeight'] ?? 720;
+      _maxWidth = args['maxWidth'] ?? 1920;
+      _maxHeight = args['maxHeight'] ?? 1920;
       return _updateCaptureSettings();
     });
 
     // Update frame rate
-    registerMethod('setFrameRate', (args) {
-      _frameRate = args['frameRate'] ?? 30;
-      return _updateCaptureSettings();
-    });
   }
 
   void register() {

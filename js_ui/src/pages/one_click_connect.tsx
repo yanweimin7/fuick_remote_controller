@@ -166,7 +166,7 @@ export default function AnyLinkHomePage() {
         />
       }
     >
-      <Stack fit="expand">
+      
         <Column padding={20} crossAxisAlignment="stretch">
           <Container
             padding={24}
@@ -325,40 +325,8 @@ export default function AnyLinkHomePage() {
             <Text text="v1.0.0" color="#CBD5E1" fontSize={12} />
           </Container>
 
-        </Column>
-
-        {/* Remote Control Overlay - When we are being controlled */}
-        {remoteConnected && (
-          <Positioned left={0} right={0} top={0} bottom={0}>
-            <Container color="#0F172ACC" alignment="center" padding={30}>
-              <Column mainAxisAlignment="center" crossAxisAlignment="center">
-                <Container
-                  padding={24}
-                  decoration={{
-                    color: "#FFFFFF20",
-                    borderRadius: 100,
-                  }}
-                  margin={{ bottom: 32 }}
-                >
-                  <Icon name="screen_share" size={64} color="#FFFFFF" />
-                </Container>
-
-                <Text
-                  text="Screen Sharing Active"
-                  color="#FFFFFF"
-                  fontSize={24}
-                  fontWeight="bold"
-                  margin={{ bottom: 12 }}
-                />
-
-                <Text
-                  text="This device is being controlled remotely"
-                  color="#94A3B8"
-                  fontSize={16}
-                  margin={{ bottom: 48 }}
-                />
-
-                <GestureDetector onTap={handleStopSharing}>
+{remoteConnected &&
+        <GestureDetector onTap={handleStopSharing}>
                   <Container
                     padding={{ horizontal: 32, vertical: 16 }}
                     decoration={{
@@ -383,11 +351,11 @@ export default function AnyLinkHomePage() {
                     </Row>
                   </Container>
                 </GestureDetector>
-              </Column>
-            </Container>
-          </Positioned>
-        )}
-      </Stack>
+                }
+        </Column>
+                  
+
+      
     </Scaffold>
   );
 }
