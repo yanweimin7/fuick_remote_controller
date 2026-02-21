@@ -8,6 +8,7 @@ import 'package:fuickjs_flutter/core/service/native_event_service.dart';
 import 'package:fuickjs_flutter/core/service/native_services.dart';
 
 import 'control_service.dart';
+import 'screen_capture_service.dart';
 
 typedef SignalingCallback = void Function(Map<String, dynamic> data);
 
@@ -22,9 +23,14 @@ class WebRTCService extends BaseFuickService {
   MediaStream? _localStream;
   MediaStream? _remoteStream;
 
+  MediaStream? get remoteStream => _remoteStream;
+
   SignalingCallback? _onSignal;
+  void Function(MediaStream)? _onRemoteStream;
+  void Function()? _onDataChannelOpen;
   bool _isCaller = false;
   bool _isController = false;
+  String? _captureMode;
 
   // Cache for incoming chunks
   final Map<String, List<String?>> _chunkCache = {};
@@ -55,7 +61,8 @@ class WebRTCService extends BaseFuickService {
   WebRTCService._internal() {
     registerAsyncMethod('startCall', (args) async {
       final isCaller = args['isCaller'] == true;
-      await startCall(isCaller);
+      final captureMode = args['captureMode'] as String?;
+      await startCall(isCaller, captureMode: captureMode);
       return true;
     });
 
@@ -84,28 +91,85 @@ class WebRTCService extends BaseFuickService {
     _onSignal = callback;
   }
 
-  Future<void> startCall(bool isCaller) async {
-    // debugPrint('WebRTCService: startCall(isCaller: $isCaller)');
+  void setOnRemoteStream(void Function(MediaStream) callback) {
+    _onRemoteStream = callback;
+  }
+
+  void setOnDataChannelOpen(void Function() callback) {
+    _onDataChannelOpen = callback;
+  }
+
+  Future<void> startCapture() async {
+    final mediaConstraints = <String, dynamic>{
+      'audio': false,
+      'video': {
+        'mandatory': {
+          'minWidth': '1280',
+          'minHeight': '720',
+          'minFrameRate': '30',
+        },
+        'optional': [],
+      }
+    };
+
+    try {
+      MediaStream stream =
+          await navigator.mediaDevices.getDisplayMedia(mediaConstraints);
+      _localStream = stream;
+    } catch (e) {
+      debugPrint('WebRTC startCapture error: $e');
+    }
+  }
+
+  Future<void> startCall(bool isCaller, {String? captureMode}) async {
+    // debugPrint('WebRTCService: startCall(isCaller: $isCaller, captureMode: $captureMode)');
 
     // Close existing connection if any, but preserve the queue if we are starting fresh
-    // Actually, for a fresh start triggered by Offer, we might want to clear,
-    // but if candidates arrived just milliseconds after Offer but before this line executes?
-    // Safe to clear only if we are sure.
-    // Let's just close the PC and Stream, but keep the queue logic handled carefully.
     if (_peerConnection != null) {
       await _peerConnection!.close();
       _peerConnection = null;
     }
+
+    if (_localStream != null) {
+      _localStream!.dispose();
+      _localStream = null;
+    }
+
     // Don't call stopCall() here because it clears _candidateQueue, which might already have
     // candidates if they arrived while startCall was being scheduled.
     // However, usually Offer comes first.
+    // Let's just close the PC and Stream, but keep the queue logic handled carefully.
 
     _isCaller = isCaller;
     _isController = isCaller; // For legacy calls, Caller is Controller
+    _captureMode = captureMode;
 
     // Create Peer Connection
     // debugPrint('WebRTCService: Creating PeerConnection...');
     _peerConnection = await createPeerConnection(_config, _constraints);
+
+    // If WebRTC mode and Controlled (Callee), start capture and add track
+    if (!isCaller && captureMode == 'webrtc') {
+      // Start foreground service first to comply with Android 14+ MediaProjection requirements
+      final serviceStarted =
+          await ScreenCaptureService().startForegroundService();
+
+      if (!serviceStarted) {
+        debugPrint(
+            'WebRTCService: Failed to start foreground service. Aborting capture.');
+        return;
+      }
+
+      // Short delay to ensure service is fully registered
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      await startCapture();
+      if (_localStream != null) {
+        _localStream!.getTracks().forEach((track) {
+          _peerConnection!.addTrack(track, _localStream!);
+        });
+      }
+    }
 
     // Setup Ice Candidate Handler
     _peerConnection!.onIceCandidate = (candidate) {
@@ -133,8 +197,10 @@ class WebRTCService extends BaseFuickService {
 
     // Handle Remote Stream (Controller side)
     _peerConnection!.onTrack = (event) {
-      // Not using MediaStream for now, using DataChannel for frames
-      // debugPrint('WebRTCService: onTrack received');
+      if (event.streams.isNotEmpty) {
+        _remoteStream = event.streams[0];
+        _onRemoteStream?.call(_remoteStream!);
+      }
     };
 
     // Setup Data Channel (for control commands)
@@ -154,10 +220,14 @@ class WebRTCService extends BaseFuickService {
       await _peerConnection!.setLocalDescription(offer);
 
       // debugPrint('WebRTCService: Sending Offer...');
-      _sendSignal({
+      final signal = {
         'type': 'offer',
         'sdp': offer.sdp,
-      });
+      };
+      if (_captureMode != null) {
+        signal['captureMode'] = _captureMode;
+      }
+      _sendSignal(signal);
     } else {
       // Controlee waits for data channel
       // debugPrint('WebRTCService: Waiting for DataChannel...');
@@ -175,12 +245,15 @@ class WebRTCService extends BaseFuickService {
       // debugPrint('WebRTCService: Data Channel State: $state');
       if (state == RTCDataChannelState.RTCDataChannelOpen) {
         // debugPrint('WebRTCService: Data Channel OPEN! Emitting connection events.');
+        _onDataChannelOpen?.call();
+
         // Notify UI that connection is established
         if (_isController) {
           // Controller side
           controller?.getService<NativeEventService>()?.emit('connected', {
             'ip': 'P2P',
             'port': 0,
+            'captureMode': _captureMode,
           });
         } else {
           // Controlee side
@@ -188,6 +261,7 @@ class WebRTCService extends BaseFuickService {
               ?.getService<NativeEventService>()
               ?.emit('onClientConnected', {
             'status': 'connected',
+            'captureMode': _captureMode,
             'client': {
               'address': 'P2P',
               'port': 0,
@@ -417,19 +491,36 @@ class WebRTCService extends BaseFuickService {
   }
 
   Future<void> stopCall() async {
+    // debugPrint('WebRTCService: stopCall');
     try {
-      await _dataChannel?.close();
-      await _peerConnection?.close();
-      _peerConnection = null;
-      _dataChannel = null;
-      _localStream?.dispose();
-      _localStream = null;
-      _remoteStream?.dispose();
-      _remoteStream = null;
+      if (_dataChannel != null) {
+        await _dataChannel!.close();
+        _dataChannel = null;
+      }
+      if (_peerConnection != null) {
+        await _peerConnection!.close();
+        _peerConnection = null;
+      }
+      if (_localStream != null) {
+        await _localStream!.dispose();
+        _localStream = null;
+      }
+
+      // Stop foreground service if in WebRTC mode
+      if (!_isCaller && _captureMode == 'webrtc') {
+        await ScreenCaptureService().stopForegroundService();
+      }
+
+      if (_remoteStream != null) {
+        await _remoteStream!.dispose();
+        _remoteStream = null;
+      }
       _candidateQueue.clear();
       _chunkCache.clear();
+      _isCaller = false;
+      _isController = false;
     } catch (e) {
-      debugPrint(e.toString());
+      debugPrint('Error stopping call: $e');
     }
   }
 }

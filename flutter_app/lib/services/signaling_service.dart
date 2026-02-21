@@ -45,8 +45,9 @@ class SignalingService extends BaseFuickService {
 
     registerAsyncMethod('connectToDevice', (args) async {
       final targetId = args['targetId'];
+      final captureMode = args['captureMode'];
       _targetDeviceId = targetId;
-      return await _startConnectionFlow(targetId);
+      return await _startConnectionFlow(targetId, captureMode: captureMode);
     });
   }
 
@@ -144,6 +145,7 @@ class SignalingService extends BaseFuickService {
     if (type == 'offer') {
       // Received Offer -> Set Remote -> Create Answer -> Send Answer
       _targetDeviceId = sourceId; // Lock on to this caller
+      final captureMode = data['captureMode'];
 
       // Notify UI
       // debugPrint('SignalingService: Emitting received_offer to UI');
@@ -155,7 +157,7 @@ class SignalingService extends BaseFuickService {
       // FIX: Initialize PeerConnection as Callee (false)
       // This is required before we can handle any signals
       // debugPrint('SignalingService: Initializing WebRTC as Callee...');
-      await webRTC.startCall(false);
+      await webRTC.startCall(false, captureMode: captureMode);
 
       // Ensure setSignalingCallback is set BEFORE calling handleSignal.
       webRTC.setSignalingCallback((signalData) {
@@ -179,7 +181,8 @@ class SignalingService extends BaseFuickService {
     }
   }
 
-  Future<bool> _startConnectionFlow(String targetId) async {
+  Future<bool> _startConnectionFlow(String targetId,
+      {String? captureMode}) async {
     // debugPrint('SignalingService: Starting connection flow to $targetId');
     if (_client == null ||
         _client!.connectionStatus!.state != MqttConnectionState.connected) {
@@ -194,12 +197,15 @@ class SignalingService extends BaseFuickService {
     // Set callback to send Offer and Candidates
     webRTC.setSignalingCallback((data) {
       // debugPrint('SignalingService: Sending ${data['type']} to $targetId');
+      if (data['type'] == 'offer' && captureMode != null) {
+        data['captureMode'] = captureMode;
+      }
       _sendSignal(targetId, data['type'], data);
     });
 
     // Initiate Call (creates Offer)
     debugPrint('SignalingService: WebRTC startCall(true)...');
-    await webRTC.startCall(true); // isCaller = true
+    await webRTC.startCall(true, captureMode: captureMode); // isCaller = true
 
     return true;
   }

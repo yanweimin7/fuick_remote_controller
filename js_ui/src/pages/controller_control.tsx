@@ -25,12 +25,17 @@ import { ScreenCaptureService } from "../services/screen_capture_service";
 import { WebRTCService } from "../services/webrtc_service";
 import { DeviceInfo, ScreenFrame } from "../types";
 
+// Custom WebRTC Video View Component
+const RTCVideoView = (props: any) => React.createElement("RTCVideoView", props);
+
 interface ControllerControlPageProps {
   device?: DeviceInfo;
+  captureMode?: string;
 }
 
 export default function ControllerControlPage(props: ControllerControlPageProps) {
-  const { device } = props;
+  const { device, captureMode } = props;
+  const isWebRTC = captureMode === 'webrtc';
   const navigator = useNavigator();
   const [error, setError] = useState<string | null>(null);
   const [screenImage, setScreenImage] = useState<string | null>(null);
@@ -84,6 +89,24 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
       }
     });
 
+    // Listen for screen info (WebRTC mode)
+    const unsubscribeInfo = ControlService.onScreenInfo((info: any) => {
+      if (typeof info.width === 'number' && typeof info.height === 'number') {
+        const newWidth = info.width;
+        const newHeight = info.height;
+
+        setScreenSize((prev) => {
+          if (prev.width === newWidth && prev.height === newHeight) return prev;
+          return { width: newWidth, height: newHeight };
+        });
+
+        setOriginalScreenSize((prev) => {
+          if (prev.width === newWidth && prev.height === newHeight) return prev;
+          return { width: newWidth, height: newHeight };
+        });
+      }
+    });
+
     // WebRTC setup
     // const unsubscribeWebRTC = WebRTCService.setup();
 
@@ -93,10 +116,10 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
         if (state === "connected") {
           // Start WebRTC Call only if not P2P (P2P uses manual token exchange)
           if (device?.ip !== "P2P") {
-            WebRTCService.startCall(true);
+            WebRTCService.startCall(true, captureMode);
           }
         } else {
-          setError("Connection Lost");
+          setError("连接中断");
           WebRTCService.stopCall();
         }
       }
@@ -104,12 +127,13 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
 
     return () => {
       unsubscribe();
+      unsubscribeInfo();
       unsubscribeState();
       // unsubscribeWebRTC();
       WebRTCService.stopCall();
       ControlService.disconnect();
     };
-  }, [device]);
+  }, [device, captureMode]);
 
   // Handle touch events - Map coordinates to the controlled device screen
   const handlePointerDown = (e: any) => {
@@ -216,7 +240,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
       <Scaffold
         appBar={
           <AppBar
-            title={<Text text="Connection Error" fontSize={20} fontWeight="bold" color="#FFFFFF" />}
+            title={<Text text="连接错误" fontSize={20} fontWeight="bold" color="#FFFFFF" />}
             leading={
               <GestureDetector onTap={() => navigator.pop()}>
                 <Container padding={4}>
@@ -242,12 +266,12 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
               margin={{ top: 16 }}
             />
             <Button
-              text="Go Back"
+              text="返回"
               onTap={() => navigator.pop()}
               margin={{ top: 24 }}
             />
             <Button
-              text="Load Test Image"
+              text="加载测试图片"
               onTap={() => {
                 // Base64 for a 1x1 red pixel
                 const testImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -264,10 +288,11 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
 
   return (
     <Scaffold
+      backgroundColor={isWebRTC ? "transparent" : undefined}
       appBar={
         showControls ? (
           <AppBar
-            title={<Text text={device?.name || "AnyLink Remote"} fontSize={20} fontWeight="bold" color="#FFFFFF" />}
+            title={<Text text={device?.name || "AnyLink 远程"} fontSize={20} fontWeight="bold" color="#FFFFFF" />}
             leading={
               <GestureDetector onTap={() => navigator.pop()}>
                 <Container padding={4}>
@@ -282,7 +307,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
     >
       <Stack>
         <Positioned left={0} right={0} top={0} bottom={0}>
-          <Container color="#000000">
+          <Container color={isWebRTC ? "transparent" : "#000000"}>
             <VisibilityDetector
               onVisibilityChanged={(info) => {
                 if (info.size.width !== localSize.width || info.size.height !== localSize.height) {
@@ -294,26 +319,33 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
                 onPointerDown={(e: any) => handlePointerDown(e)}
                 onPointerUp={(e: any) => handlePointerUp(e)}
               >
-                <Container alignment="center" width={localSize.width || 300} height={localSize.height || 600} color="#333333">
-                  {screenImage ? (
-                    <Stack>
-                      <Image
-                        url={screenImage}
-                        fit="contain"
-                        width={localSize.width || 300}
-                        height={localSize.height || 600}
-                      />
-                    </Stack>
+                <Container alignment="center" width={localSize.width || 300} height={localSize.height || 600} color={isWebRTC ? "transparent" : "#333333"}>
+                  {isWebRTC ? (
+                    <RTCVideoView
+                      objectFit="contain"
+                      mirror={false}
+                    />
                   ) : (
-                    <Column mainAxisAlignment="center">
-                      <CircularProgressIndicator color="#2563EB" />
-                      <Text
-                        text="Waiting for stream..."
-                        fontSize={14}
-                        color="#888888"
-                        margin={{ top: 16 }}
-                      />
-                    </Column>
+                    screenImage ? (
+                      <Stack>
+                        <Image
+                          url={screenImage}
+                          fit="contain"
+                          width={localSize.width || 300}
+                          height={localSize.height || 600}
+                        />
+                      </Stack>
+                    ) : (
+                      <Column mainAxisAlignment="center">
+                        <CircularProgressIndicator color="#2563EB" />
+                        <Text
+                          text="等待画面..."
+                          fontSize={14}
+                          color="#888888"
+                          margin={{ top: 16 }}
+                        />
+                      </Column>
+                    )
                   )}
                 </Container>
               </PointerListener>

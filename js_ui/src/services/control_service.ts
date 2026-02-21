@@ -98,6 +98,14 @@ export class ControlService {
     };
   }
 
+  static onScreenInfo(callback: (info: any) => void): () => void {
+    const handleInfo = (data: any) => callback(data);
+    NativeEvent.on("screen_info", handleInfo);
+    return () => {
+      NativeEvent.off("screen_info", handleInfo);
+    };
+  }
+
   static onClientConnected(callback: (data: any) => void): () => void {
     const handleConnect = (data: any) => callback(data);
     NativeEvent.on("onClientConnected", handleConnect);

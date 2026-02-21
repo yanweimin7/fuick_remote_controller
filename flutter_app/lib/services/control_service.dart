@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -93,6 +94,28 @@ class ControlService extends BaseFuickService {
         return true;
       }
       return false;
+    });
+
+    // Handle DataChannel open (Send screen info)
+    WebRTCService().setOnDataChannelOpen(() {
+      try {
+        final view = PlatformDispatcher.instance.views.first;
+        final size = view.physicalSize;
+        final width = size.width;
+        final height = size.height;
+        final pixelRatio = view.devicePixelRatio;
+
+        final info = {
+          'type': 'screen_info',
+          'width': width,
+          'height': height,
+          'pixelRatio': pixelRatio,
+        };
+        // debugPrint('ControlService: Sending screen info: $info');
+        WebRTCService().sendData(jsonEncode(info));
+      } catch (e) {
+        debugPrint('ControlService: Error sending screen info: $e');
+      }
     });
   }
 
@@ -260,20 +283,17 @@ class ControlService extends BaseFuickService {
   void processResponse(Map<String, dynamic> response) {
     // Check if it is screen frame data
     if (response['type'] == 'screen_frame') {
-      // final frameData = response['data'] as Map;
-      // final dataContent = frameData['data'];
-      // int size = 0;
-      // if (dataContent is List) {
-      //   size = dataContent.length;
-      // } else if (dataContent is String) {
-      //   size = dataContent.length;
-      // }
-      // debugPrint(
-      //    'ControlService: Emitting screen_frame to JS (img size: $size, ts: ${frameData['timestamp']})');
-
       controller
           ?.getService<NativeEventService>()
           ?.emit('screen_frame', response['data']);
+      return;
+    }
+
+    // Check if it is screen info
+    if (response['type'] == 'screen_info') {
+      controller
+          ?.getService<NativeEventService>()
+          ?.emit('screen_info', response);
       return;
     }
 

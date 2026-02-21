@@ -18,6 +18,8 @@ class ScreenCaptureService : Service() {
     companion object {
         const val CHANNEL_ID = "screen_capture_channel"
         const val NOTIFICATION_ID = 1
+        var isServiceRunning = false
+        var onServiceStarted: (() -> Unit)? = null
     }
 
     override fun onCreate() {
@@ -28,15 +30,28 @@ class ScreenCaptureService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = createNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            )
+            try {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                )
+                isServiceRunning = true
+                onServiceStarted?.invoke()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         } else {
             startForeground(NOTIFICATION_ID, notification)
+            isServiceRunning = true
+            onServiceStarted?.invoke()
         }
         return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        isServiceRunning = false
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

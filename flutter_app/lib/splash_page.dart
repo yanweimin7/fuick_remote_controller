@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:fuickjs_flutter/core/engine/fuick_app_context.dart';
 import 'package:fuickjs_flutter/core/engine/fuick_app_context_manager.dart';
+import 'package:fuickjs_flutter/core/container/fuick_app_controller.dart'
+    as fuick;
+import 'package:remote_control_app/widgets/rtc_video_view_parser.dart';
 
 import 'home_page.dart';
 
@@ -20,6 +23,10 @@ class _SplashPageState extends State<SplashPage> {
 
   Future<void> _initApp() async {
     final appContext = FuickAppContext(appName: 'anylink_controller');
+
+    // Register custom widgets
+    fuick.widgetFactory.register(RTCVideoViewParser());
+
     FuickAppContextManager().registerContext('anylink_controller', appContext);
     // Minimum display time 500ms
     final minDisplayTime = Future.delayed(const Duration(milliseconds: 500));

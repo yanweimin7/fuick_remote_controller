@@ -183,6 +183,26 @@ class ScreenCaptureService extends BaseFuickService {
     ControlService().sendScreenFrame(frameData);
   }
 
+  /// Start foreground service (required for Android 14+ MediaProjection)
+  Future<bool> startForegroundService() async {
+    try {
+      await _channel.invokeMethod('startForegroundService');
+      return true;
+    } catch (e) {
+      debugPrint('ScreenCapture: Error starting foreground service: $e');
+      return false;
+    }
+  }
+
+  /// Stop foreground service
+  Future<void> stopForegroundService() async {
+    try {
+      await _channel.invokeMethod('stopForegroundService');
+    } catch (e) {
+      debugPrint('ScreenCapture: Error stopping foreground service: $e');
+    }
+  }
+
   /// Update capture settings
   Future<bool> _updateCaptureSettings() async {
     try {
