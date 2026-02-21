@@ -42,11 +42,19 @@ class WebRTCService extends BaseFuickService {
   // Configuration
   final Map<String, dynamic> _config = {
     'iceServers': [
+      // Public STUN servers that may work in China (Prioritize these)
+      {'urls': 'stun:stun.qq.com:3478'},
+      {'urls': 'stun:stun.miwifi.com:3478'},
+      // Google STUN servers (Fallback)
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
       {'urls': 'stun:stun2.l.google.com:19302'},
-      {'urls': 'stun:stun3.l.google.com:19302'},
-      {'urls': 'stun:stun4.l.google.com:19302'},
+      // TODO: For production use outside LAN (4G/5G) or complex NAT, you MUST add a TURN server.
+      // {
+      //   'urls': 'turn:your.turn.server:3478',
+      //   'username': 'user',
+      //   'credential': 'password'
+      // }
     ],
     'sdpSemantics': 'unified-plan',
   };
@@ -154,6 +162,18 @@ class WebRTCService extends BaseFuickService {
       // Start foreground service first to comply with Android 14+ MediaProjection requirements
       bool serviceStarted = true;
       if (Platform.isAndroid) {
+        // Android 14+ requires permission BEFORE starting the foreground service.
+        try {
+          final granted = await Helper.requestCapturePermission();
+          if (!granted) {
+            debugPrint('WebRTCService: Screen capture permission denied');
+            return;
+          }
+        } catch (e) {
+          debugPrint('WebRTCService: Error requesting permission: $e');
+          // If the method is not found or fails, we proceed and let the service fail if strict mode is on
+        }
+
         serviceStarted = await ScreenCaptureService().startForegroundService();
       }
 
@@ -190,10 +210,15 @@ class WebRTCService extends BaseFuickService {
     };
 
     _peerConnection!.onIceConnectionState = (state) {
-      // debugPrint('WebRTCService: ICE Connection State: $state');
+      debugPrint('WebRTCService: ICE Connection State: $state');
       controller
           ?.getService<NativeEventService>()
           ?.emit('webrtc_state', {'state': state.toString()});
+
+      if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+        debugPrint(
+            'WebRTC Connection Failed. You might need a TURN server for cross-LAN connections.');
+      }
     };
 
     _peerConnection!.onConnectionState = (state) {
