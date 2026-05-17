@@ -21,9 +21,7 @@ class SignalingService extends BaseFuickService {
   String? _deviceId;
   String? _targetDeviceId;
 
-  // Public MQTT Broker
-  // Using test.mosquitto.org for better stability
-  static const String BROKER = 'test.mosquitto.org';
+  static const String BROKER = 'activemq.apache.org';
   static const int PORT = 1883;
   static const String TOPIC_PREFIX = 'remote_control/signal';
 
@@ -60,7 +58,6 @@ class SignalingService extends BaseFuickService {
       _deviceId = (100000 + Random().nextInt(900000)).toString();
     }
 
-    // Client ID must be unique
     final clientId = 'flutter_rc_${_deviceId}_${Random().nextInt(1000)}';
     _client = MqttServerClient(BROKER, clientId);
     _client!.port = PORT;
@@ -68,18 +65,14 @@ class SignalingService extends BaseFuickService {
     _client!.keepAlivePeriod = 60;
     _client!.autoReconnect = true;
 
-    // Callbacks
     _client!.onConnected = () {
-      // debugPrint('MQTT Connected');
       _subscribeToMyTopics();
     };
-    _client!.onDisconnected = () {
-      // debugPrint('MQTT Disconnected');
-    };
+    _client!.onDisconnected = () {};
 
     final connMess = MqttConnectMessage()
         .withClientIdentifier(clientId)
-        .startClean() // Non persistent session for now
+        .startClean()
         .withWillQos(MqttQos.atLeastOnce);
     _client!.connectionMessage = connMess;
 
@@ -91,9 +84,7 @@ class SignalingService extends BaseFuickService {
       return false;
     }
 
-    // Check connection status
     if (_client!.connectionStatus!.state == MqttConnectionState.connected) {
-      // Listen to messages
       _client!.updates!.listen(_onMessage);
       return true;
     } else {

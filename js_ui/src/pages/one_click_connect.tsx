@@ -17,7 +17,6 @@ import {
   Image,
 } from "fuickjs";
 import { NetworkService } from "../services/network_service";
-import { StorageService } from "../services/storage_service";
 import { ControlService } from "../services/control_service";
 import { ScreenCaptureService } from "../services/screen_capture_service";
 
@@ -52,35 +51,37 @@ export default function AnyLinkHomePage() {
     loadHistory();
 
     // Listen for incoming connections (Acting as Controlee)
-    const removeClientListener = ControlService.onClientConnected(async (data) => {
-      if (data.status === "connected") {
-        setRemoteConnected(true);
-        setStatus("远程控制已连接");
+    const removeClientListener = ControlService.onClientConnected(
+      async (data) => {
+        if (data.status === "connected") {
+          setRemoteConnected(true);
+          setStatus("远程控制已连接");
 
-        // Auto start screen capture
-        if (data.captureMode === 'webrtc') {
-          console.log("WebRTC Capture Mode active. Skipping manual capture.");
-        } else {
-          try {
-            // Add a small delay to ensure UI is ready and connection is stable
-            await new Promise(resolve => setTimeout(resolve, 500));
+          // Auto start screen capture
+          if (data.captureMode === "webrtc") {
+            console.log("WebRTC Capture Mode active. Skipping manual capture.");
+          } else {
+            try {
+              // Add a small delay to ensure UI is ready and connection is stable
+              await new Promise((resolve) => setTimeout(resolve, 500));
 
-            await ScreenCaptureService.startCapture({
-              quality: 40,
-              maxWidth: 720,
-              maxHeight: 1280,
-              frameRate: 20,
-            });
-          } catch (e) {
-            console.error("Failed to start screen capture:", e);
-            setStatus("启动录屏失败");
+              await ScreenCaptureService.startCapture({
+                quality: 40,
+                maxWidth: 720,
+                maxHeight: 1280,
+                frameRate: 20,
+              });
+            } catch (e) {
+              console.error("Failed to start screen capture:", e);
+              setStatus("启动录屏失败");
+            }
           }
+        } else if (data.status === "disconnected") {
+          setRemoteConnected(false);
+          setStatus("准备连接");
         }
-      } else if (data.status === "disconnected") {
-        setRemoteConnected(false);
-        setStatus("准备连接");
-      }
-    });
+      },
+    );
 
     // Cleanup
     return () => {
@@ -92,7 +93,7 @@ export default function AnyLinkHomePage() {
   const initSignaling = async () => {
     setStatus("正在连接云端...");
     // Connect as 'controller' but this allows both roles via topic subscription
-    const connected = await NetworkService.connectSignaling('controller');
+    const connected = await NetworkService.connectSignaling("controller");
     if (connected) {
       const id = await NetworkService.getDeviceId();
       setMyId(id);
@@ -103,7 +104,7 @@ export default function AnyLinkHomePage() {
   };
 
   const loadHistory = async () => {
-    const lastId = await StorageService.getString("lastTargetId");
+    const lastId = (globalThis as any).localStorage.getItem("lastTargetId");
     if (lastId) {
       setTargetId(lastId);
     }
@@ -119,10 +120,13 @@ export default function AnyLinkHomePage() {
     setStatus(`正在连接到 ${targetId}...`);
 
     // Save ID
-    await StorageService.setString("lastTargetId", targetId);
+    (globalThis as any).localStorage.setItem("lastTargetId", targetId);
 
     try {
-      const success = await NetworkService.connectToDevice(targetId, captureMode);
+      const success = await NetworkService.connectToDevice(
+        targetId,
+        captureMode,
+      );
 
       if (success) {
         // Navigate to Control Page immediately
@@ -132,7 +136,7 @@ export default function AnyLinkHomePage() {
             name: `设备 ${targetId}`,
             id: targetId,
           },
-          captureMode: captureMode
+          captureMode: captureMode,
         });
         setIsConnecting(false);
         setStatus("就绪");
@@ -163,7 +167,11 @@ export default function AnyLinkHomePage() {
           backgroundColor={Colors.primary}
           elevation={0}
           actions={[
-            <GestureDetector onTap={() => setCaptureMode(captureMode === "webrtc" ? "manual" : "webrtc")}>
+            <GestureDetector
+              onTap={() =>
+                setCaptureMode(captureMode === "webrtc" ? "manual" : "webrtc")
+              }
+            >
               <Container padding={16}>
                 <Row>
                   <Text
@@ -173,15 +181,13 @@ export default function AnyLinkHomePage() {
                     fontWeight="bold"
                     margin={{ right: 8 }}
                   />
-
                 </Row>
               </Container>
-            </GestureDetector>
+            </GestureDetector>,
           ]}
         />
       }
     >
-
       <Column padding={20} crossAxisAlignment="stretch">
         <Container
           padding={24}
@@ -271,7 +277,7 @@ export default function AnyLinkHomePage() {
             decoration={{
               color: "#F1F5F9",
               borderRadius: 12,
-              border: { width: 1, color: Colors.divider }
+              border: { width: 1, color: Colors.divider },
             }}
             padding={{ horizontal: 16, vertical: 4 }}
             margin={{ bottom: 20 }}
@@ -285,7 +291,7 @@ export default function AnyLinkHomePage() {
             />
           </Container>
 
-          <GestureDetector onTap={isConnecting ? () => { } : handleConnect}>
+          <GestureDetector onTap={isConnecting ? () => {} : handleConnect}>
             <Container
               height={56}
               decoration={{
@@ -295,7 +301,7 @@ export default function AnyLinkHomePage() {
                   color: isConnecting ? "transparent" : "#2563EB4D",
                   offset: { dx: 0, dy: 4 },
                   blurRadius: 8,
-                }
+                },
               }}
               alignment="center"
             >
@@ -305,7 +311,12 @@ export default function AnyLinkHomePage() {
                     <CircularProgressIndicator color="#FFFFFF" />
                   </SizedBox>
                   <SizedBox width={12} />
-                  <Text text="连接中..." color="#FFFFFF" fontSize={16} fontWeight="bold" />
+                  <Text
+                    text="连接中..."
+                    color="#FFFFFF"
+                    fontSize={16}
+                    fontWeight="bold"
+                  />
                 </Row>
               ) : (
                 <Text
@@ -326,8 +337,12 @@ export default function AnyLinkHomePage() {
               width={8}
               height={8}
               decoration={{
-                color: status.includes("Ready") ? Colors.success : (status.includes("Error") ? Colors.error : Colors.secondary),
-                borderRadius: 4
+                color: status.includes("Ready")
+                  ? Colors.success
+                  : status.includes("Error")
+                    ? Colors.error
+                    : Colors.secondary,
+                borderRadius: 4,
               }}
               margin={{ right: 8 }}
             />
@@ -340,7 +355,7 @@ export default function AnyLinkHomePage() {
           <Text text="v1.0.0" color="#CBD5E1" fontSize={12} />
         </Container>
 
-        {remoteConnected &&
+        {remoteConnected && (
           <GestureDetector onTap={handleStopSharing}>
             <Container
               padding={{ horizontal: 32, vertical: 16 }}
@@ -351,7 +366,7 @@ export default function AnyLinkHomePage() {
                   color: "#EF444466",
                   offset: { dx: 0, dy: 4 },
                   blurRadius: 12,
-                }
+                },
               }}
             >
               <Row>
@@ -366,11 +381,8 @@ export default function AnyLinkHomePage() {
               </Row>
             </Container>
           </GestureDetector>
-        }
+        )}
       </Column>
-
-
-
     </Scaffold>
   );
 }

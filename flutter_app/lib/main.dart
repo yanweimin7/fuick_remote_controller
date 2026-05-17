@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fuickjs_flutter/core/engine/engine.dart';
@@ -7,29 +9,31 @@ import 'services/control_service.dart';
 import 'services/network_discovery_service.dart';
 import 'services/screen_capture_service.dart';
 import 'services/signaling_service.dart';
-import 'services/storage_service.dart';
 import 'services/webrtc_service.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
+  runZonedGuarded<Future<void>>(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // Set preferred orientations
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+    // Set preferred orientations
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
 
-  EngineInit.initIsolate();
+    EngineInit.initIsolate();
 
-  // Register Native Services
-  ScreenCaptureService().register();
-  ControlService().register();
-  NetworkDiscoveryService().register();
-  WebRTCService().register();
-  SignalingService().register();
-  StorageService().register();
+    // Register Native Services
+    ScreenCaptureService().register();
+    ControlService().register();
+    NetworkDiscoveryService().register();
+    WebRTCService().register();
+    SignalingService().register();
 
-  runApp(const AnyLinkApp());
+    runApp(const AnyLinkApp());
+  }, (error, stackTrace) {
+    debugPrint('Global error caught: $error');
+  });
 }
 
 class AnyLinkApp extends StatelessWidget {
