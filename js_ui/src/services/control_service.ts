@@ -7,7 +7,10 @@ export class ControlService {
   }
 
   static async isConnected(): Promise<boolean> {
-    const result = await (globalThis as any).dartCallNative("Control.isConnected", {});
+    // 旧版用 dartCallNative + await 把 Promise 当同步结果用, 在 worker isolate
+    // 里实际拿到的是 trampoline 经主 isolate 异步返回的对象, 行为完全错误。
+    // 改用 dartCallNativeAsync, 语义才正确。
+    const result = await (globalThis as any).dartCallNativeAsync("Control.isConnected", {});
     return result === true;
   }
 

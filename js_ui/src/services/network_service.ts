@@ -3,7 +3,9 @@ import { DeviceInfo } from "../types";
 
 export class NetworkService {
   static async getDeviceInfo(): Promise<DeviceInfo> {
-    const result = await (globalThis as any).dartCallNative(
+    // 必须 async: 在 worker isolate 中 NetworkDiscovery 不在白名单, 同步调用
+    // 实际拿到的是 trampoline 转主 isolate 返回的 Promise, 行为完全错误。
+    const result = await (globalThis as any).dartCallNativeAsync(
       "NetworkDiscovery.getDeviceInfo",
       {}
     );
@@ -11,7 +13,7 @@ export class NetworkService {
   }
 
   static async getLocalIp(): Promise<string | null> {
-    const result = await (globalThis as any).dartCallNative(
+    const result = await (globalThis as any).dartCallNativeAsync(
       "NetworkDiscovery.getLocalIp",
       {}
     );
