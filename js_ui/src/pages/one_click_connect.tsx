@@ -19,6 +19,7 @@ import {
 import { NetworkService } from "../services/network_service";
 import { ControlService } from "../services/control_service";
 import { ScreenCaptureService } from "../services/screen_capture_service";
+import { WebRTCService } from "../services/webrtc_service";
 
 // Define a nice color palette
 const Colors = {
@@ -34,6 +35,14 @@ const Colors = {
   divider: "#E2E8F0",
 };
 
+/** 采集源选项。value 需与 Dart 侧 MediaSourceType.wireId 一致 */
+const SOURCE_OPTIONS = [
+  { value: "screen", label: "屏幕", icon: "screen_share" },
+  { value: "camera", label: "摄像头", icon: "videocam" },
+  { value: "screen,camera", label: "双画面", icon: "picture_in_picture_alt" },
+  { value: "manual", label: "兼容", icon: "image" },
+];
+
 export default function AnyLinkHomePage() {
   const navigator = useNavigator();
   const [targetId, setTargetId] = useState("");
@@ -41,7 +50,8 @@ export default function AnyLinkHomePage() {
   const [status, setStatus] = useState("初始化中...");
   const [isConnecting, setIsConnecting] = useState(false);
   const [remoteConnected, setRemoteConnected] = useState(false);
-  const [captureMode, setCaptureMode] = useState("webrtc");
+  // 'screen' | 'camera' | 'screen,camera' | 'manual'
+  const [captureMode, setCaptureMode] = useState("screen");
 
   useEffect(() => {
     // Initialize Signaling
@@ -57,12 +67,10 @@ export default function AnyLinkHomePage() {
           setRemoteConnected(true);
           setStatus("远程控制已连接");
 
-          // Auto start screen capture
-          if (data.captureMode === "webrtc") {
-            console.log("WebRTC Capture Mode active. Skipping manual capture.");
-          } else {
+          // 采集已由 Dart 侧 CaptureCoordinator 启动：
+          // WebRTC 模式无需在此操作；manual 模式才走旧的 MediaProjection 截图通道。
+          if (!data.captureMode || data.captureMode === "manual") {
             try {
-              // Add a small delay to ensure UI is ready and connection is stable
               await new Promise((resolve) => setTimeout(resolve, 500));
 
               await ScreenCaptureService.startCapture({
@@ -92,14 +100,22 @@ export default function AnyLinkHomePage() {
 
   const initSignaling = async () => {
     setStatus("正在连接云端...");
-    // Connect as 'controller' but this allows both roles via topic subscription
+    // 设备 ID 是本地身份（也是本机 MQTT topic 的名字），与云端连通性无关。
+    // 必须先取：若挂在 connectSignaling 成功之后，broker 不可达时 ID 会永远
+    // 停在"加载中..."，用户既拿不到要分享的 ID，也看不出是网络问题。
+    try {
+      const id = await NetworkService.getDeviceId();
+      if (id) setMyId(id);
+    } catch (e) {
+      console.error("getDeviceId failed:", e);
+    }
+
     const connected = await NetworkService.connectSignaling("controller");
     if (connected) {
-      const id = await NetworkService.getDeviceId();
-      setMyId(id);
       setStatus("准备连接");
     } else {
-      setStatus("网络错误");
+      // ID 仍可分享/抄录，只是暂时无法被连接
+      setStatus("云端不可用，暂无法被连接");
     }
   };
 
@@ -152,6 +168,7 @@ export default function AnyLinkHomePage() {
   };
 
   const handleStopSharing = async () => {
+    await WebRTCService.stopCall();
     await ControlService.disconnect();
     setRemoteConnected(false);
     setStatus("准备连接");
@@ -166,25 +183,6 @@ export default function AnyLinkHomePage() {
           centerTitle={true}
           backgroundColor={Colors.primary}
           elevation={0}
-          actions={[
-            <GestureDetector
-              onTap={() =>
-                setCaptureMode(captureMode === "webrtc" ? "manual" : "webrtc")
-              }
-            >
-              <Container padding={16}>
-                <Row>
-                  <Text
-                    text={captureMode === "webrtc" ? "标准模式" : "兼容模式"}
-                    color="#FFFFFF"
-                    fontSize={14}
-                    fontWeight="bold"
-                    margin={{ right: 8 }}
-                  />
-                </Row>
-              </Container>
-            </GestureDetector>,
-          ]}
         />
       }
     >
@@ -273,6 +271,54 @@ export default function AnyLinkHomePage() {
             margin={{ bottom: 20 }}
           />
 
+          <Text
+            text="共享内容"
+            fontSize={13}
+            fontWeight="bold"
+            color={Colors.textSecondary}
+            margin={{ bottom: 10 }}
+          />
+
+          {/* 采集源选择：多路共享时控制端会自动渲染为多个画面 */}
+          <Row mainAxisAlignment="spaceBetween" margin={{ bottom: 20 }}>
+            {SOURCE_OPTIONS.map((option) => {
+              const selected = captureMode === option.value;
+              return (
+                <GestureDetector
+                  key={option.value}
+                  onTap={() => setCaptureMode(option.value)}
+                >
+                  <Container
+                    width={78}
+                    padding={{ vertical: 12 }}
+                    decoration={{
+                      color: selected ? Colors.primary : "#F1F5F9",
+                      borderRadius: 10,
+                      border: {
+                        width: 1,
+                        color: selected ? Colors.primary : Colors.divider,
+                      },
+                    }}
+                    alignment="center"
+                  >
+                    <Icon
+                      name={option.icon}
+                      size={22}
+                      color={selected ? "#FFFFFF" : Colors.textSecondary}
+                    />
+                    <Text
+                      text={option.label}
+                      fontSize={12}
+                      fontWeight="bold"
+                      color={selected ? "#FFFFFF" : Colors.textSecondary}
+                      margin={{ top: 6 }}
+                    />
+                  </Container>
+                </GestureDetector>
+              );
+            })}
+          </Row>
+
           <Container
             decoration={{
               color: "#F1F5F9",
@@ -337,10 +383,10 @@ export default function AnyLinkHomePage() {
               width={8}
               height={8}
               decoration={{
-                color: status.includes("Ready")
-                  ? Colors.success
-                  : status.includes("Error")
-                    ? Colors.error
+                color: status.includes("失败") || status.includes("错误")
+                  ? Colors.error
+                  : status === "准备连接" || status === "就绪"
+                    ? Colors.success
                     : Colors.secondary,
                 borderRadius: 4,
               }}

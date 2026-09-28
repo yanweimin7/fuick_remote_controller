@@ -4,6 +4,10 @@ const { execSync } = require("child_process");
 const fs = require("fs");
 
 const isWatch = process.argv.includes("--watch");
+// --dev 产出未压缩 + React development + sourcemap 的包。
+// 压缩版把组件名抹掉，React 只剩 "Minified React error #130"，无法定位是哪个
+// 组件为 undefined；排查 #130 时必须用这个模式。
+const isDev = isWatch || process.argv.includes("--dev");
 const QJSC_PATH = path.resolve(
   __dirname,
   "../../fuickjs_engine/src/main/jni/quickjs/build/qjsc",
@@ -31,7 +35,7 @@ function createReactPlugin(isProd) {
 }
 
 async function build() {
-  const isProd = !isWatch;
+  const isProd = !isDev;
 
   const reconcilerPath = isProd
     ? "node_modules/react-reconciler/cjs/react-reconciler.production.min.js"
@@ -91,6 +95,17 @@ async function build() {
       console.log("Compiling anylink_controller to QuickJS bytecode...");
       execSync(`${QJSC_PATH} -b -o ${destBin} ${src}`);
       console.log(`Compiled to ${destBin}`);
+    } else {
+      // 编译器不在就绝不能留下旧的 .qjc：_loadFromAssets 在 useAotCode 开启时
+      // 优先加载 .qjc，一份陈旧字节码会把刚构建的 JS 整个遮蔽，且不报错
+      // （表现为"改了代码没生效"）。宁可没有字节码。
+      if (fs.existsSync(destBin)) {
+        fs.unlinkSync(destBin);
+        console.log(
+          `Removed stale ${destBin} (qjsc not found at ${QJSC_PATH}) — ` +
+            "it would shadow the freshly built JS when useAotCode is on",
+        );
+      }
     }
 
     const oldFiles = ["framework.bundle.js", "framework.bundle.qjc"];

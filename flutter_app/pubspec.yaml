@@ -24,30 +24,34 @@ dependencies:
   # Local Network Discovery
   multicast_dns: ^0.3.2
   
-  # Permission Management
-  permission_handler: ^11.0.1
+  # Permission Management (12.x: 13.x 要求 compileSdk 37，本机 SDK 最高 36)
+  permission_handler: ^12.0.3
   
   # Local Storage
   shared_preferences: ^2.2.2
   
   # Image Processing
-  image: ^4.1.3
+  image: ^4.10.1
   
   # Device Info
-  device_info_plus: ^9.1.0
+  device_info_plus: ^13.2.0
   
-  # Network State
-  connectivity_plus: ^5.0.2
+  # Network State (约束与 fuickjs_flutter 保持一致)
+  connectivity_plus: ^6.1.5
 
   # WebRTC
-  flutter_webrtc:
-    path: packages/flutter_webrtc
+  flutter_webrtc: ^1.6.2+hotfix.3
   mqtt_client: ^10.11.9
+
+  # FuickJS 社区组件 <VisibilityDetector>（lib/community/ 下的 parser 需要它）
+  visibility_detector: ^0.4.0+2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.1
+  flutter_lints: ^6.0.0
+  # 仅测试用：独立复算 assets 里 zip 的 SHA-256，与 bundles.json 声明比对。
+  crypto: ^3.0.3
 
 flutter:
   uses-material-design: true

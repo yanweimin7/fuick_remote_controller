@@ -15,12 +15,12 @@ class NetworkDiscoveryService extends BaseFuickService {
 
   NetworkDiscoveryService._internal() {
     // Get local device info
-    registerMethod('getDeviceInfo', (args) async {
+    registerAsyncMethod('getDeviceInfo', (args) async {
       return await _getDeviceInfo();
     });
 
     // Get local IP address
-    registerMethod('getLocalIp', (args) async {
+    registerAsyncMethod('getLocalIp', (args) async {
       return await _getLocalIp();
     });
   }

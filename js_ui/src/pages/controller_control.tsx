@@ -17,8 +17,9 @@ import {
   Positioned,
   useNavigator,
   PointerListener,
-  VisibilityDetector,
+  ClipRRect,
 } from "fuickjs";
+import { VisibilityDetector } from "@fuickjs-community/visibility_detector";
 import { NetworkService } from "../services/network_service";
 import { ControlService } from "../services/control_service";
 import { ScreenCaptureService } from "../services/screen_capture_service";
@@ -33,9 +34,128 @@ interface ControllerControlPageProps {
   captureMode?: string;
 }
 
+const MANUAL_MODES = ["manual", undefined, ""];
+
+/** 摄像头画面默认镜像（前置），屏幕不镜像 */
+const isCamera = (id: string) => id === "camera";
+
+interface VideoStageProps {
+  activePrimary: string;
+  secondaryIds: string[];
+  onSelectPrimary: (id: string) => void;
+}
+
+/**
+ * 视频区独立成 memo 组件。
+ *
+ * RTCVideoView 是裸宿主元素，fuickjs 运行时重渲染时不做就地复用，会把原生
+ * 视图整个重建 —— 日志表现为每秒一次 `setVideoTrack(null)` 后重新 set，
+ * 重建间隙 Surface 为空，表现为画面每秒闪一下黑屏。
+ *
+ * FPS 每秒更新一次，若与视频区同处一个组件就会持续触发重建。抽出来加
+ * memo 后，FPS 变化不再波及视频区。
+ */
+const VideoStage = React.memo(
+  ({ activePrimary, secondaryIds, onSelectPrimary }: VideoStageProps) => (
+    <Stack>
+      <RTCVideoView
+        objectFit="contain"
+        mirror={isCamera(activePrimary)}
+        streamId={activePrimary}
+      />
+      {/* 副画面 PiP：点击切换为主画面 */}
+      {secondaryIds.map((id) => (
+        <Positioned key={id} right={12} top={12} width={96} height={160}>
+          <GestureDetector onTap={() => onSelectPrimary(id)}>
+            {/* fuickjs 的 Container 不支持 overflow，BoxDecoration 也没有
+                clip 字段；圆角裁剪要用 ClipRRect，否则 PiP 会溢出圆角。 */}
+            <ClipRRect borderRadius={8} clipBehavior="antiAlias">
+              <Container
+                decoration={{
+                  border: { width: 2, color: "#FFFFFF66" },
+                  borderRadius: 8,
+                }}
+              >
+                <RTCVideoView
+                  objectFit="cover"
+                  mirror={isCamera(id)}
+                  streamId={id}
+                />
+              </Container>
+            </ClipRRect>
+          </GestureDetector>
+        </Positioned>
+      ))}
+    </Stack>
+  ),
+  (prev, next) =>
+    prev.activePrimary === next.activePrimary &&
+    prev.secondaryIds.length === next.secondaryIds.length &&
+    prev.secondaryIds.every((id, i) => id === next.secondaryIds[i]) &&
+    prev.onSelectPrimary === next.onSelectPrimary,
+);
+
+VideoStage.displayName = "VideoStage";
+
+interface FpsBadgeProps {
+  enabled: boolean;
+  manual?: boolean;
+}
+
+/**
+ * FPS 显示做成独立叶子组件，自带 state 与轮询。
+ *
+ * fuickjs 的 _FuickNodeWidget 用 `ValueKey(node.id)` 作 key，页面每次重渲染
+ * 都会给节点换新 id，于是整棵子树被销毁重建 —— RTCVideoView 的原生视图随之
+ * 重建，间隙 Surface 为空，表现为每秒闪一次黑屏。
+ *
+ * 把每秒变化的 FPS 收进本组件后，页面本身不再每秒重渲染，视频区保持稳定。
+ */
+const FpsBadge = ({ enabled, manual }: FpsBadgeProps) => {
+  const [fps, setFps] = useState(0);
+  const frameCount = useRef(0);
+  const lastTime = useRef(Date.now());
+
+  useEffect(() => {
+    if (!enabled) return;
+    // 手动模式：统计截图帧到达速率
+    if (manual) {
+      const unsubscribe = ScreenCaptureService.onScreenFrame(() => {
+        frameCount.current++;
+        const now = Date.now();
+        if (now - lastTime.current >= 1000) {
+          setFps(frameCount.current);
+          frameCount.current = 0;
+          lastTime.current = now;
+        }
+      });
+      return unsubscribe;
+    }
+    // WebRTC 模式：真实码流统计
+    const timer = setInterval(async () => {
+      try {
+        const stats = await WebRTCService.getStats();
+        const values = Object.values(stats);
+        if (values.length === 0) return;
+        setFps(values.reduce((sum, s) => sum + (s.fps ?? 0), 0));
+      } catch (e) {
+        // 连接未建立时会失败，忽略
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [enabled, manual]);
+
+  if (!enabled) return null;
+  return <Text text={`FPS: ${fps}`} color="#00FF00" fontSize={12} />;
+};
+
+FpsBadge.displayName = "FpsBadge";
+
 export default function ControllerControlPage(props: ControllerControlPageProps) {
   const { device, captureMode } = props;
-  const isWebRTC = captureMode === 'webrtc';
+  // manual = 旧截图通道；其余走 WebRTC 实时流
+  const isManual = MANUAL_MODES.includes(captureMode as any);
+  const isWebRTC = !isManual;
   const navigator = useNavigator();
   const [error, setError] = useState<string | null>(null);
   const [screenImage, setScreenImage] = useState<string | null>(null);
@@ -43,97 +163,99 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
   const [originalScreenSize, setOriginalScreenSize] = useState({ width: 0, height: 0 });
   const [localSize, setLocalSize] = useState({ width: 0, height: 0 });
   const [showControls, setShowControls] = useState(true);
-  const [fps, setFps] = useState(0);
+
+  // WebRTC 模式下已就绪的远端流；空数组表示尚未收到
+  const [streamIds, setStreamIds] = useState<string[]>([]);
+  // 主画面（点击缩略图可切换），其余作为 PiP 小窗
+  const [primaryId, setPrimaryId] = useState<string | null>(null);
 
   const touchStartPos = useRef({ x: 0, y: 0 });
   const viewRef = useRef<any>(null);
-  const frameCount = useRef(0);
-  const lastTime = useRef(Date.now());
+
+  // 主画面默认取第一路；小窗 = 其余
+  const activePrimary = primaryId && streamIds.includes(primaryId) ? primaryId : streamIds[0] ?? null;
+  const secondaryIds = streamIds.filter((id) => id !== activePrimary);
 
   useEffect(() => {
-    // Listen for screen frames
-    const unsubscribe = ScreenCaptureService.onScreenFrame((frame: ScreenFrame) => {
-      // Log received frame details
-      if (frame.data) {
-        // Ensure no newlines in base64
-        const cleanData = frame.data.replace(/[\r\n]/g, "");
-        setScreenImage(cleanData);
-      }
+    if (isManual) return;
 
-      // Calculate FPS
-      frameCount.current++;
-      const now = Date.now();
-      if (now - lastTime.current >= 1000) {
-        setFps(frameCount.current);
-        frameCount.current = 0;
-        lastTime.current = now;
-      }
-
-      // Optimization: Update screenSize only when dimensions change to avoid unnecessary re-renders
-      if (typeof frame.width === 'number' && typeof frame.height === 'number') {
-        const newWidth = frame.width;
-        const newHeight = frame.height;
-        setScreenSize((prev) => {
-          if (prev.width === newWidth && prev.height === newHeight) return prev;
-          return { width: newWidth, height: newHeight };
-        });
-      }
-
-      if (typeof frame.originalWidth === 'number' && typeof frame.originalHeight === 'number') {
-        const newWidth = frame.originalWidth;
-        const newHeight = frame.originalHeight;
-        setOriginalScreenSize((prev) => {
-          if (prev.width === newWidth && prev.height === newHeight) return prev;
-          return { width: newWidth, height: newHeight };
-        });
-      }
+    // 远端流就绪通知 —— 决定渲染几路画面
+    const unsubscribeStreams = ControlService.onRemoteStreams((ids) => {
+      setStreamIds(ids);
     });
 
-    // Listen for screen info (WebRTC mode)
-    const unsubscribeInfo = ControlService.onScreenInfo((info: any) => {
-      if (typeof info.width === 'number' && typeof info.height === 'number') {
-        const newWidth = info.width;
-        const newHeight = info.height;
+    return () => {
+      unsubscribeStreams();
+    };
+  }, [isManual]);
 
-        setScreenSize((prev) => {
-          if (prev.width === newWidth && prev.height === newHeight) return prev;
-          return { width: newWidth, height: newHeight };
-        });
-
-        setOriginalScreenSize((prev) => {
-          if (prev.width === newWidth && prev.height === newHeight) return prev;
-          return { width: newWidth, height: newHeight };
-        });
-      }
-    });
-
-    // WebRTC setup
-    // const unsubscribeWebRTC = WebRTCService.setup();
-
-    // Listen for connection state
-    const unsubscribeState = ControlService.onConnectionStateChange(
-      (state, data) => {
-        if (state === "connected") {
-          // Start WebRTC Call only if not P2P (P2P uses manual token exchange)
-          if (device?.ip !== "P2P") {
-            WebRTCService.startCall(true, captureMode);
+  useEffect(() => {
+    // 手动模式：订阅截图帧
+    const unsubscribe = isManual
+      ? ScreenCaptureService.onScreenFrame((frame: ScreenFrame) => {
+          if (frame.data) {
+            const cleanData = frame.data.replace(/[\r\n]/g, "");
+            setScreenImage(cleanData);
           }
-        } else {
-          setError("连接中断");
-          WebRTCService.stopCall();
+
+          // 先收窄成 const 再进 updater 闭包：TS 的类型收窄不会跨闭包保留到
+          // 回调参数上，直接在闭包里读 frame.width 会退化成 number | undefined。
+          const w = frame.width;
+          const h = frame.height;
+          if (typeof w === "number" && typeof h === "number") {
+            setScreenSize((prev) =>
+              prev.width === w && prev.height === h
+                ? prev
+                : { width: w, height: h }
+            );
+          }
+
+          const ow = frame.originalWidth;
+          const oh = frame.originalHeight;
+          if (typeof ow === "number" && typeof oh === "number") {
+            setOriginalScreenSize((prev) =>
+              prev.width === ow && prev.height === oh
+                ? prev
+                : { width: ow, height: oh }
+            );
+          }
+        })
+      : () => {};
+
+    const unsubscribeInfo = isManual
+      ? ControlService.onScreenInfo((info: any) => {
+          if (typeof info.width === "number" && typeof info.height === "number") {
+            setScreenSize({ width: info.width, height: info.height });
+            setOriginalScreenSize({ width: info.width, height: info.height });
+          }
+        })
+      : () => {};
+
+    // 连接状态 → 建立/销毁 PeerConnection
+    const unsubscribeState = ControlService.onConnectionStateChange((state, data) => {
+      if (state === "connected") {
+        // 受控端在此收到 controller 指定的采集源
+        if (device?.ip !== "P2P") {
+          WebRTCService.startCall(true, captureMode);
         }
+      } else {
+        setError("连接中断");
+        WebRTCService.stopCall();
+        setStreamIds([]);
       }
-    );
+    });
 
     return () => {
       unsubscribe();
       unsubscribeInfo();
       unsubscribeState();
-      // unsubscribeWebRTC();
-      WebRTCService.stopCall();
+      if (!isManual) {
+        WebRTCService.stopCall();
+        setStreamIds([]);
+      }
       ControlService.disconnect();
     };
-  }, [device, captureMode]);
+  }, [device, captureMode, isManual]);
 
   // Handle touch events - Map coordinates to the controlled device screen
   const handlePointerDown = (e: any) => {
@@ -321,10 +443,23 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
               >
                 <Container alignment="center" width={localSize.width || 300} height={localSize.height || 600} color={isWebRTC ? "transparent" : "#333333"}>
                   {isWebRTC ? (
-                    <RTCVideoView
-                      objectFit="contain"
-                      mirror={false}
-                    />
+                    activePrimary ? (
+                      <VideoStage
+                        activePrimary={activePrimary}
+                        secondaryIds={secondaryIds}
+                        onSelectPrimary={setPrimaryId}
+                      />
+                    ) : (
+                      <Column mainAxisAlignment="center">
+                        <CircularProgressIndicator color="#2563EB" />
+                        <Text
+                          text="等待画面..."
+                          fontSize={14}
+                          color="#888888"
+                          margin={{ top: 16 }}
+                        />
+                      </Column>
+                    )
                   ) : (
                     screenImage ? (
                       <Stack>
@@ -364,7 +499,7 @@ export default function ControllerControlPage(props: ControllerControlPageProps)
                 decoration={{ color: "#00000080", borderRadius: 4 }}
                 alignment="center"
               >
-                <Text text={`FPS: ${fps}`} color="#00FF00" fontSize={12} />
+                <FpsBadge enabled={showControls} manual={isManual} />
               </Container>
 
               <Container

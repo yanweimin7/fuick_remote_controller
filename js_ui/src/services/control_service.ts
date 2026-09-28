@@ -116,4 +116,19 @@ export class ControlService {
       NativeEvent.off("onClientConnected", handleConnect);
     };
   }
+
+  /**
+   * 可用的远端流列表变化。
+   * 由 Dart 侧 StreamRegistry 推送，UI 据此决定渲染几路 RTCVideoView。
+   */
+  static onRemoteStreams(callback: (streamIds: string[]) => void): () => void {
+    const handle = (data: any) => {
+      const ids = Array.isArray(data?.streamIds) ? data.streamIds : [];
+      callback(ids);
+    };
+    NativeEvent.on("rtc_streams", handle);
+    return () => {
+      NativeEvent.off("rtc_streams", handle);
+    };
+  }
 }

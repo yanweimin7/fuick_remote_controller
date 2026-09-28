@@ -72,7 +72,9 @@ class ControlService extends BaseFuickService {
     });
 
     // Get Connection Status
-    registerMethod('isConnected', (args) => WebRTCService().isDataChannelOpen);
+    registerAsyncMethod('isConnected', (args) async {
+      return WebRTCService().isDataChannelOpen;
+    });
 
     // Check if Accessibility Service is enabled
     registerAsyncMethod('isAccessibilityEnabled', (args) async {

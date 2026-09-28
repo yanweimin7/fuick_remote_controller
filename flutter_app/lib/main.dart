@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fuickjs_flutter/core/engine/engine.dart';
+import 'package:remote_control_app/offline_bootstrap.dart';
 import 'package:remote_control_app/splash_page.dart';
 
 import 'services/control_service.dart';
@@ -22,6 +23,13 @@ void main() {
     ]);
 
     EngineInit.initIsolate();
+
+    // bundle 验签/解压/包管理。必须在 FuickAppContext.init() 之前：
+    // 引擎走 Offline.promoteAndGetRoot(appName)，未 init 时它静默返回 null
+    // 并回落到 assets/js/*.js 直读（不报错，但跳过整套信任链）。
+    // validate() 同步 fail-fast，init() 本身 fire-and-forget 由引擎接手等待。
+    AnyLinkOfflineBootstrap.validate();
+    AnyLinkOfflineBootstrap.init();
 
     // Register Native Services
     ScreenCaptureService().register();

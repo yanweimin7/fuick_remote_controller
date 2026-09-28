@@ -3,6 +3,8 @@ import 'package:fuickjs_flutter/core/engine/fuick_app_context.dart';
 import 'package:fuickjs_flutter/core/engine/fuick_app_context_manager.dart';
 import 'package:fuickjs_flutter/core/container/fuick_app_controller.dart'
     as fuick;
+import 'package:remote_control_app/offline_bootstrap.dart';
+import 'package:remote_control_app/community/visibility_detector_parser.dart';
 import 'package:remote_control_app/widgets/rtc_video_view_parser.dart';
 
 import 'home_page.dart';
@@ -22,12 +24,17 @@ class _SplashPageState extends State<SplashPage> {
   }
 
   Future<void> _initApp() async {
-    final appContext = FuickAppContext(appName: 'anylink_controller');
+    // appName 必须与 bundles.json 的 name / <name>.zip 一致，否则
+    // promoteAndGetRoot 找不到内置包，直接返回 null 回落默认 RN bundle。
+    final appContext =
+        FuickAppContext(appName: AnyLinkOfflineBootstrap.bundleName);
 
     // Register custom widgets
     fuick.widgetFactory.register(RTCVideoViewParser());
+    fuick.widgetFactory.register(VisibilityDetectorParser());
 
-    FuickAppContextManager().registerContext('anylink_controller', appContext);
+    FuickAppContextManager()
+        .registerContext(AnyLinkOfflineBootstrap.bundleName, appContext);
     // Minimum display time 500ms
     final minDisplayTime = Future.delayed(const Duration(milliseconds: 500));
     try {

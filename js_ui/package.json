@@ -4,11 +4,17 @@
   "description": "AnyLink UI - Powered by FuickJS",
   "main": "dist/index.js",
   "scripts": {
-    "build": "node esbuild.js",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && node esbuild.js",
+    "build:dev": "npm run typecheck && node esbuild.js --dev",
     "watch": "node esbuild.js --watch",
-    "dev": "npm run build && node debug_server.js"
+    "dev": "npm run build && node debug_server.js",
+    "bundle:pack": "node scripts/bundle-pack.js",
+    "bundle:pack:app": "node scripts/bundle-pack.js --copy-app",
+    "bundle:pack:demo": "node scripts/bundle-pack.js --copy-demo"
   },
   "dependencies": {
+    "@fuickjs-community/visibility_detector": "file:../../fuickjs_community/visibility_detector",
     "fuickjs": "file:../../fuickjs_framework/fuickjs",
     "react": "^18.2.0"
   },

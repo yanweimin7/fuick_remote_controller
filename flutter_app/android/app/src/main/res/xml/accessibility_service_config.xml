@@ -5,4 +5,4 @@
     android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
-    android:settingsActivity="com.example.remote_control_app.MainActivity" />
+    android:settingsActivity="com.anylink.app.MainActivity" />

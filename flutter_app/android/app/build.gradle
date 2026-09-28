@@ -23,7 +23,7 @@ if (flutterVersionName == null) {
 }
 
 android {
-    namespace "com.example.remote_control_app"
+    namespace "com.anylink.app"
     compileSdk 36
     ndkVersion "27.2.12479018"
 
@@ -41,7 +41,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.example.remote_control_app"
+        applicationId "com.anylink.app"
         minSdk 24
         targetSdk 34
         versionCode flutterVersionCode.toInteger()

@@ -33,7 +33,7 @@ class ScreenCaptureService extends BaseFuickService {
 
   ScreenCaptureService._internal() {
     // Start screen capture
-    registerMethod('startCapture', (args) async {
+    registerAsyncMethod('startCapture', (args) async {
       _quality = asIntOrNull(args['quality']) ?? 90;
       _maxWidth = asIntOrNull(args['maxWidth']) ?? 1920;
       _maxHeight = asIntOrNull(args['maxHeight']) ?? 1920;
@@ -42,21 +42,21 @@ class ScreenCaptureService extends BaseFuickService {
     });
 
     // Stop screen capture
-    registerMethod('stopCapture', (args) async {
+    registerAsyncMethod('stopCapture', (args) async {
       return await stopCapture();
     });
 
     // Get capture status
-    registerMethod('isCapturing', (args) => _isCapturing);
+    registerAsyncMethod('isCapturing', (args) async => _isCapturing);
 
     // Update image quality
-    registerMethod('setQuality', (args) {
+    registerAsyncMethod('setQuality', (args) async {
       _quality = args['quality'] ?? 90;
       return _updateCaptureSettings();
     });
 
     // Update resolution
-    registerMethod('setResolution', (args) {
+    registerAsyncMethod('setResolution', (args) async {
       _maxWidth = args['maxWidth'] ?? 1920;
       _maxHeight = args['maxHeight'] ?? 1920;
       return _updateCaptureSettings();
