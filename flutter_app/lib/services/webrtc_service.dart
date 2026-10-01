@@ -33,6 +33,17 @@ class WebRTCService extends BaseFuickService {
 
   List<MediaSourceType> _activeSources = const [];
 
+  /// 对端设备 ID。被控端用它告诉用户「是哪个设备在请求/正在控制你」。
+  String? _peerDeviceId;
+
+  void setPeerDeviceId(String? id) => _peerDeviceId = id;
+
+  final List<void Function()> _sessionEndedListeners = [];
+
+  /// 会话异常终止时通知订阅方（目前只有 SignalingService 用来释放 _busy）。
+  void addSessionEndedListener(void Function() cb) =>
+      _sessionEndedListeners.add(cb);
+
   /// 兼容旧调用点：未指定 streamId 时取首路远端流
   MediaStream? get remoteStream => StreamRegistry.instance.firstRemote;
 
@@ -98,6 +109,21 @@ class WebRTCService extends BaseFuickService {
         _emitConnectedState('connected');
       } else {
         _emitControleeState('connected');
+      }
+    };
+
+    // 被控端连接终止：撤掉 UI 标识 + 释放信令层的会话占用。
+    // 少了这一步，SignalingService._busy 会一直卡在 true，
+    // 之后所有 offer 都被静默丢弃，被控端再也不弹授权框。
+    _session.onConnectionEnded = () {
+      if (_session.isCaller) return;
+      _emitControleeState('disconnected');
+      for (final cb in List.of(_sessionEndedListeners)) {
+        try {
+          cb();
+        } catch (e) {
+          debugPrint('WebRTCService: sessionEnded listener error: $e');
+        }
       }
     };
 
@@ -198,6 +224,11 @@ class WebRTCService extends BaseFuickService {
     // 会话结束，解绑后所有 renderer 引用归零，此时才真正释放 texture
     RTCVideoRendererPool.instance.clear();
     _activeSources = const [];
+    // 被控端 UI 靠这个事件把「被控制中」标识撤掉并回到准备连接
+    if (!_session.isCaller) {
+      _emitControleeState('disconnected');
+    }
+    _peerDeviceId = null;
   }
 
   // ==================== 内部 ====================
@@ -268,13 +299,18 @@ class WebRTCService extends BaseFuickService {
   }
 
   void _emitControleeState(String status) {
+    debugPrint('[ControleeState] emit status=$status peer=$_peerDeviceId '
+        'isCaller=${_session.isCaller} hasController=${controller != null}');
     controller?.getService<NativeEventService>()?.emit('onClientConnected', {
       'status': status,
       'captureMode': _wireCaptureMode,
       'client': {
         'address': 'P2P',
         'port': 0,
-        'name': 'WebRTC Controller',
+        'name': _peerDeviceId == null
+            ? 'WebRTC Controller'
+            : 'WebRTC Controller ($_peerDeviceId)',
+        'deviceId': _peerDeviceId,
       },
     });
   }

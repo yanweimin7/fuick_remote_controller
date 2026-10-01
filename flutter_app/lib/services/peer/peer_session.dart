@@ -38,6 +38,9 @@ class PeerSession {
   void Function(String streamId, MediaStream stream)? _onRemoteStream;
   void Function()? _onDataChannelOpen;
 
+  /// 连接终止（ICE disconnected/failed/closed）时回调，由上层释放会话占用。
+  void Function()? _onConnectionEnded;
+
   /// 主叫端在生成 offer 前要预留的 recvonly video 路数，见 [addReceiveTransceivers]。
   int _receiveTransceiverCount = 0;
 
@@ -55,6 +58,8 @@ class PeerSession {
       _onRemoteStream = cb;
 
   set onDataChannelOpen(void Function()? cb) => _onDataChannelOpen = cb;
+
+  set onConnectionEnded(void Function()? cb) => _onConnectionEnded = cb;
 
   /// 建立 PC 并按需发起 offer。
   ///
@@ -89,6 +94,14 @@ class PeerSession {
 
     pc.onIceConnectionState = (state) {
       debugPrint('PeerSession: ICE state: $state');
+      // 连接终止必须向上抛。之前这里只打日志，导致 SignalingService._busy
+      // 在会话死掉后永远是 true，之后所有 offer 都被静默丢弃，
+      // 被控端表现为"怎么都没反应"、也不会再弹授权框。
+      if (state == RTCIceConnectionState.RTCIceConnectionStateDisconnected ||
+          state == RTCIceConnectionState.RTCIceConnectionStateFailed ||
+          state == RTCIceConnectionState.RTCIceConnectionStateClosed) {
+        _onConnectionEnded?.call();
+      }
     };
 
     pc.onConnectionState = (_) {};
@@ -285,7 +298,9 @@ class PeerSession {
 
   void _setupDataChannel(RTCDataChannel channel) {
     channel.onDataChannelState = (state) {
-      debugPrint('PeerSession: data channel state: $state');
+      debugPrint('PeerSession: data channel state: $state '
+          'isOpen=${state == RTCDataChannelState.RTCDataChannelOpen} '
+          'hasCb=${_onDataChannelOpen != null}');
       if (state == RTCDataChannelState.RTCDataChannelOpen) {
         // 受控端把自己的 trackId 映射上报给控制端
         if (!_isCaller && _localTrackIndex.isNotEmpty) {

@@ -118,6 +118,40 @@ export class ControlService {
   }
 
   /**
+   * 有人请求控制本机。
+   * 被控端必须弹框让用户确认，未确认前 Dart 侧不会启动采集。
+   */
+  static onControlRequest(
+    callback: (data: { sourceId?: string; captureMode?: string }) => void
+  ): () => void {
+    const handle = (data: any) => callback(data ?? {});
+    NativeEvent.on("control_request", handle);
+    return () => {
+      NativeEvent.off("control_request", handle);
+    };
+  }
+
+  /** 主叫端：被控端拒绝了本次控制请求。 */
+  static onControlRejected(
+    callback: (data: { sourceId?: string }) => void
+  ): () => void {
+    const handle = (data: any) => callback(data ?? {});
+    NativeEvent.on("control_rejected", handle);
+    return () => {
+      NativeEvent.off("control_rejected", handle);
+    };
+  }
+
+  /** 回应控制请求。allow=false 会回 reject 给主叫端并释放挂起状态。 */
+  static async respondControlRequest(allow: boolean): Promise<boolean> {
+    const result = await (globalThis as any).dartCallNativeAsync(
+      "Signaling.respondControlRequest",
+      { allow }
+    );
+    return result === true;
+  }
+
+  /**
    * 可用的远端流列表变化。
    * 由 Dart 侧 StreamRegistry 推送，UI 据此决定渲染几路 RTCVideoView。
    */

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Column,
   Container,
@@ -15,6 +15,7 @@ import {
   Row,
   Icon,
   Image,
+  DialogService,
 } from "fuickjs";
 import { NetworkService } from "../services/network_service";
 import { ControlService } from "../services/control_service";
@@ -53,6 +54,25 @@ export default function AnyLinkHomePage() {
   // 'screen' | 'camera' | 'screen,camera' | 'manual'
   const [captureMode, setCaptureMode] = useState("screen");
 
+  // 被控端：等待用户确认的授权请求
+  const [pendingRequest, setPendingRequest] = useState<{
+    sourceId?: string;
+    captureMode?: string;
+  } | null>(null);
+  // 被控端：正在控制本机的设备 ID，用于顶部标识
+  const [controlledBy, setControlledBy] = useState<string | null>(null);
+  // 弹框是否已展示。用 ref 而非 state：连点/重复 offer 时 state 还没提交，
+  // 用 ref 才能立刻把后续请求挡掉，避免弹框叠着弹框。
+  const dialogShownRef = useRef(false);
+
+  /** 请求来源的采集模式名，用于让用户知道对方要看什么 */
+  const requestModeLabel = (mode?: string): string => {
+    if (!mode || mode === "manual") return "屏幕画面";
+    if (mode === "camera") return "摄像头";
+    if (mode === "screen,camera") return "屏幕与摄像头";
+    return "屏幕画面";
+  };
+
   useEffect(() => {
     // Initialize Signaling
     initSignaling();
@@ -63,9 +83,11 @@ export default function AnyLinkHomePage() {
     // Listen for incoming connections (Acting as Controlee)
     const removeClientListener = ControlService.onClientConnected(
       async (data) => {
+        console.log("[controlee] onClientConnected", JSON.stringify(data));
         if (data.status === "connected") {
           setRemoteConnected(true);
-          setStatus("远程控制已连接");
+          setControlledBy(data?.client?.deviceId ?? null);
+          setStatus("正在被远程控制");
 
           // 采集已由 Dart 侧 CaptureCoordinator 启动：
           // WebRTC 模式无需在此操作；manual 模式才走旧的 MediaProjection 截图通道。
@@ -86,17 +108,73 @@ export default function AnyLinkHomePage() {
           }
         } else if (data.status === "disconnected") {
           setRemoteConnected(false);
+          setControlledBy(null);
           setStatus("准备连接");
         }
       },
     );
 
+    // 被控端：收到控制请求 → 弹框询问用户
+    const removeRequestListener = ControlService.onControlRequest((data) => {
+      if (dialogShownRef.current) {
+        console.log("[controlee] 弹框已在展示，忽略重复请求", data);
+        return;
+      }
+      setPendingRequest(data);
+    });
+
+    // 主叫端：被拒
+    const removeRejectedListener = ControlService.onControlRejected(() => {
+      setIsConnecting(false);
+      setStatus("对方拒绝了连接请求");
+    });
+
     // Cleanup
     return () => {
       removeClientListener();
+      removeRequestListener();
+      removeRejectedListener();
       NetworkService.disconnectSignaling();
     };
   }, []);
+
+  // 弹框由 pendingRequest 驱动，单独一个 effect 处理异步交互。
+  // 不能塞进上面的初始化 effect：那里的 cleanup 会在 state 变化时重跑，
+  // 正在 await 的 showModal 会被取消。
+  useEffect(() => {
+    if (!pendingRequest) return;
+
+    let cancelled = false;
+
+    (async () => {
+      dialogShownRef.current = true;
+      try {
+        const allow = await DialogService.showModal({
+          title: "远程控制请求",
+          content: `设备 ${pendingRequest.sourceId ?? "未知"} 请求控制本机，`
+            + `将共享${requestModeLabel(pendingRequest.captureMode)}。是否允许？`,
+          showCancel: true,
+          cancelText: "拒绝",
+          confirmText: "允许",
+        });
+        if (cancelled) return;
+        await ControlService.respondControlRequest(allow === true);
+      } catch (e) {
+        console.error("respondControlRequest failed:", e);
+      } finally {
+        dialogShownRef.current = false;
+        if (!cancelled) {
+          setPendingRequest(null);
+          // 先回"准备连接"：拒绝即定局；允许则等 onClientConnected 切被控态
+          setStatus("准备连接");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingRequest]);
 
   const initSignaling = async () => {
     setStatus("正在连接云端...");
@@ -187,6 +265,111 @@ export default function AnyLinkHomePage() {
       }
     >
       <Column padding={20} crossAxisAlignment="stretch">
+        {/* 被控中 / 待确认：放在内容最顶部，保证一进页面就能看到。
+            不用全屏遮罩是因为本机此时正被远程操控，遮罩会挡住用户的返回键区域，
+            也无法区分是自己要操作还是对方在点。 */}
+        {remoteConnected ? (
+          <Container
+            margin={{ bottom: 16 }}
+            padding={16}
+            decoration={{
+              color: "#FEF2F2",
+              borderRadius: 14,
+              border: { width: 2, color: Colors.error },
+            }}
+          >
+            <Row crossAxisAlignment="center">
+              <Container
+                padding={8}
+                decoration={{
+                  color: Colors.error,
+                  borderRadius: 20,
+                }}
+              >
+                <Icon name="visibility" size={20} color="#FFFFFF" />
+              </Container>
+              <SizedBox width={12} />
+              <Column crossAxisAlignment="start">
+                <Text
+                  text="正在被远程控制"
+                  fontSize={17}
+                  fontWeight="bold"
+                  color="#991B1B"
+                />
+                <Text
+                  text={
+                    controlledBy
+                      ? `控制端设备 ID：${controlledBy}`
+                      : "对方正在查看并操作本机"
+                  }
+                  fontSize={12}
+                  color="#B91C1C"
+                  margin={{ top: 2 }}
+                />
+              </Column>
+            </Row>
+            <GestureDetector
+              onTap={async () => {
+                try {
+                  await WebRTCService.stopCall();
+                } finally {
+                  setRemoteConnected(false);
+                  setControlledBy(null);
+                  setStatus("准备连接");
+                }
+              }}
+            >
+              <Container
+                margin={{ top: 14 }}
+                padding={{ vertical: 11 }}
+                alignment="center"
+                decoration={{
+                  color: Colors.error,
+                  borderRadius: 10,
+                }}
+              >
+                <Text
+                  text="结束控制"
+                  fontSize={15}
+                  fontWeight="bold"
+                  color="#FFFFFF"
+                />
+              </Container>
+            </GestureDetector>
+          </Container>
+        ) : pendingRequest ? (
+          <Container
+            margin={{ bottom: 16 }}
+            padding={16}
+            decoration={{
+              color: "#FFFBEB",
+              borderRadius: 14,
+              border: { width: 2, color: "#F59E0B" },
+            }}
+          >
+            <Row crossAxisAlignment="center">
+              <SizedBox width={20} height={20}>
+                <CircularProgressIndicator color="#D97706" />
+              </SizedBox>
+              <SizedBox width={12} />
+              <Column crossAxisAlignment="start">
+                <Text
+                  text="等待你的确认"
+                  fontSize={15}
+                  fontWeight="bold"
+                  color="#92400E"
+                />
+                <Text
+                  text={`设备 ${pendingRequest.sourceId ?? "未知"} 正在请求控制本机`}
+                  fontSize={12}
+                  color="#B45309"
+                  margin={{ top: 2 }}
+                />
+              </Column>
+            </Row>
+          </Container>
+        ) : null}
+
         <Container
           padding={24}
           decoration={{

@@ -3,7 +3,7 @@
     {
       "name": "anylink_controller",
       "version": "1.0.0",
-      "sha256": "45413a4237cd54d9cde4e1fd9822058d49eb26b740ceb2983937f8b172810700",
+      "sha256": "b8ae9dd8b12c8952039cd5a534c6fe06bc71f05a1c49cf7aaed88999acdb7bef",
       "minAppVersion": "1.0.0",
       "label": "AnyLink",
       "initialRoute": "/"

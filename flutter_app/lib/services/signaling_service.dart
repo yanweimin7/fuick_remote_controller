@@ -33,7 +33,23 @@ class SignalingService extends BaseFuickService {
   /// 已有活跃会话时拒绝新的接入请求，避免同 id 撞车导致两路会话互相踩踏。
   bool _busy = false;
 
+  /// 已挂起、等待被控端用户确认授权的 offer。
+  ///
+  /// 收到 offer 时不能直接开采集 —— startCall 会拉起 MediaProjection 录屏，
+  /// 必须在用户明确同意之后才允许。
+  Map<String, dynamic>? _pendingOffer;
+  String? _pendingOfferSource;
+  Timer? _pendingTimer;
+
   SignalingService._internal() {
+    // 会话异常终止时释放 _busy。没有这条，被控端一旦经历过一次断连，
+    // _busy 永久为 true，之后所有 offer 都进不来。
+    WebRTCService().addSessionEndedListener(() {
+      if (!_busy) return;
+      debugPrint('SignalingService: 会话已结束，释放 busy');
+      _resetSession();
+    });
+
     registerAsyncMethod('getDeviceId', (args) async {
       _deviceId ??= _generateDeviceId();
       return _deviceId;
@@ -53,7 +69,17 @@ class SignalingService extends BaseFuickService {
       final targetId = args['targetId'];
       final captureMode = args['captureMode'];
       _targetDeviceId = targetId;
+      WebRTCService().setPeerDeviceId(targetId);
       return await _startConnectionFlow(targetId, captureMode: captureMode);
+    });
+
+    /// 被控端用户在弹框上的选择。
+    ///
+    /// allow=true  → 建链并回 answer；allow=false → 回 reject 并释放挂起状态。
+    registerAsyncMethod('respondControlRequest', (args) async {
+      final allow = args['allow'] == true;
+      await _respondControlRequest(allow);
+      return true;
     });
   }
 
@@ -214,6 +240,13 @@ class SignalingService extends BaseFuickService {
     // 会话匹配：已有会话时只接受本会话消息，新 offer 则开新会话。
     // 这样既能挡掉上一轮残留消息，又允许对方重试发起连接。
     final incomingSession = data['sessionId'] as String?;
+    // offer 必须先于 busy 拦截处理：否则被控端 busy 时会在这里被静默 return，
+    // 主叫端收不到任何回应，只能一直停在"连接中"等到超时。
+    if (type == 'offer') {
+      await _requestControlPermission(data, sourceId, incomingSession);
+      return;
+    }
+
     if (_busy && incomingSession != _sessionId) {
       // 静默 return 会让 offer 无声消失，被控端一直停在"准备连接"
       debugPrint('SignalingService: 丢弃 $type，busy=true '
@@ -221,10 +254,8 @@ class SignalingService extends BaseFuickService {
       return;
     }
 
-    if (type == 'offer') {
-      await _acceptOffer(data, sourceId, incomingSession);
-    } else if (_sessionId != null && incomingSession != _sessionId) {
-      return;
+    if (type == 'reject') {
+      await _handleRejected(data);
     } else if (type == 'answer') {
       await WebRTCService()
           .handleSignal({'type': 'answer', 'sdp': data['sdp']});
@@ -235,27 +266,93 @@ class SignalingService extends BaseFuickService {
     }
   }
 
-  Future<void> _acceptOffer(
+  /// 主叫端收到被控端的拒绝。
+  Future<void> _handleRejected(Map<String, dynamic> data) async {
+    debugPrint('SignalingService: 对方拒绝了本次控制请求');
+    controller?.getService<NativeEventService>()?.emit('control_rejected', {
+      'sourceId': data['sourceId'],
+      'sessionId': data['sessionId'],
+    });
+    await WebRTCService().stopCall();
+    _resetSession();
+  }
+
+  /// 收到 offer：挂起并请求用户授权，**不**在此处开采集。
+  Future<void> _requestControlPermission(
     Map<String, dynamic> data,
     String sourceId,
     String? sessionId,
   ) async {
     if (_busy) {
       debugPrint('SignalingService: busy, rejecting offer from $sourceId');
+      _sendSignal(sourceId, 'reject', {'reason': 'busy'});
       return;
     }
 
+    // 先占住会话，避免弹框等待期间第二个 offer 挤进来
     _busy = true;
     _targetDeviceId = sourceId;
+    _sessionId = sessionId ?? _newSessionId();
+    _pendingOffer = data;
+    _pendingOfferSource = sourceId;
+
+    debugPrint('SignalingService: 挂起 offer，等待被控端授权 from $sourceId');
+    controller?.getService<NativeEventService>()?.emit('control_request', {
+      'sourceId': sourceId,
+      'sessionId': _sessionId,
+      'captureMode': data['captureMode'],
+    });
+
+    // 兜底超时：用户一直不点弹框时不能让 _busy 永远占着，
+    // 否则本机之后再也接不进任何连接。
+    _pendingTimer?.cancel();
+    _pendingTimer = Timer(const Duration(seconds: 60), () {
+      if (_pendingOffer == null) return;
+      debugPrint('SignalingService: 授权请求 60s 未响应，自动拒绝');
+      unawaited(_respondControlRequest(false));
+    });
+  }
+
+  /// 被控端用户点「允许 / 拒绝」后的处理。
+  Future<void> _respondControlRequest(bool allow) async {
+    _pendingTimer?.cancel();
+    _pendingTimer = null;
+    final offer = _pendingOffer;
+    final source = _pendingOfferSource;
+    _pendingOffer = null;
+    _pendingOfferSource = null;
+
+    if (offer == null || source == null) {
+      debugPrint('SignalingService: respondControlRequest 无挂起请求，忽略');
+      return;
+    }
+
+    if (!allow) {
+      debugPrint('SignalingService: 用户拒绝，回 reject 给 $source');
+      _sendSignal(source, 'reject', {'reason': 'denied'});
+      _resetSession();
+      return;
+    }
+
+    await _acceptOffer(offer, source, offer['sessionId'] as String?);
+  }
+
+  Future<void> _acceptOffer(
+    Map<String, dynamic> data,
+    String sourceId,
+    String? sessionId,
+  ) async {
     // 采用主叫的 sessionId，后续 answer/candidate 才能被它接受
     _sessionId = sessionId ?? _newSessionId();
+    _targetDeviceId = sourceId;
 
     controller?.getService<NativeEventService>()?.emit('signaling_state', {
-      'state': 'received_offer',
+      'state': 'accepted',
       'sourceId': sourceId,
     });
 
     final webRTC = WebRTCService();
+    webRTC.setPeerDeviceId(sourceId);
     webRTC.setSignalingCallback((signalData) {
       _sendSignal(_targetDeviceId!, signalData['type'], signalData);
     });
@@ -268,6 +365,7 @@ class SignalingService extends BaseFuickService {
       await webRTC.handleSignal({'type': 'offer', 'sdp': data['sdp']});
     } catch (e) {
       debugPrint('SignalingService: failed to accept offer: $e');
+      _sendSignal(sourceId, 'reject', {'reason': 'failed'});
       _resetSession();
     }
   }
@@ -328,9 +426,15 @@ class SignalingService extends BaseFuickService {
   }
 
   void _resetSession() {
+    _pendingTimer?.cancel();
+    _pendingTimer = null;
     _busy = false;
     _sessionId = null;
     _targetDeviceId = null;
+    // 挂起的 offer 必须一起清掉，否则被控端在弹框上点「允许」会走到
+    // _acceptOffer，而此时 _busy 已被置回 false，等于绕过授权再建一条会话
+    _pendingOffer = null;
+    _pendingOfferSource = null;
   }
 
   Future<void> _disconnect() async {
